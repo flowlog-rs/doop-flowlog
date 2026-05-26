@@ -1,0 +1,273 @@
+/**
+ * An interface type K is a superinterface of class (or interface) type C
+ */
+.decl Superinterface(k:InterfaceType, c:ReferenceType)
+
+/**
+ * An interface type K is a superinterface of class type C if one of the
+ * following is true
+ * - K is a direct superinterface of C
+ */
+Superinterface(k, c) :-
+    DirectSuperinterface(c, k).
+
+/**
+ * - C has a direct superinterface J that has K as a superinterface
+ */
+Superinterface(k, c) :-
+    DirectSuperinterface(c, j),
+    Superinterface(k, j).
+
+/**
+ * - K is a superinterface of the direct superclass of C
+ */
+Superinterface(k, c) :-
+    DirectSuperclass(c, super),
+    Superinterface(k, super).
+
+/**
+ * A class a is a direct subclass of class c
+ */
+.decl DirectSubclass(a:ClassType, c:ClassType)
+
+/**
+ * A class a is a subclass of class c
+ *
+ * NOTE: the ordering might be unnatural, so pay attention when you use this
+ * predicate.
+ */
+.decl Subclass(c:ClassType, a:ClassType)
+
+/**
+ * A class a is a superclass of class c
+ *
+ * NOTE: The ordering might be unnatural, so pay attention when you use this
+ * predicate.
+ */
+.decl Superclass(c:ClassType, a:ClassType)
+
+DirectSubclass(a, c) :-
+    DirectSuperclass(a, c).
+
+/**
+ * A class A is a subclass of a class C if A is a direct subclass of C
+ */
+Subclass(c, a) :-
+    DirectSubclass(a, c).
+
+/**
+ * A class A is a subclass of a class C if there is a direct subclass B of C and class A is a subclass of B
+ */
+Subclass(c, a) :-
+    Subclass(b, a),
+    DirectSubclass(b, c).
+
+/**
+ * A Class A is a superclass of class C whenever C is a subclass of A
+ */
+Superclass(c, a) :-
+    Subclass(a, c).
+
+
+.decl SubtypeOf(subtype:Type, type:Type)
+.output SubtypeOf
+.decl SupertypeOf(supertype:Type, type:Type)
+.decl Unsubclassable(type:ReferenceType)
+.decl Subclassable(type:ReferenceType)
+.decl SubtypeOfDifferent(subtype:Type, type:Type)
+.decl ClassConstructor(method:Method, type:ClassType)
+
+/**
+ * The following rules check whether type S can be cast to type T. Implicitly,
+ * they expose the type hierarchy.
+ */
+SupertypeOf(s, t) :-
+    SubtypeOf(t, s).
+
+
+/**
+ * If S is an ordinary (nonarray) class, then
+ * - S must be the same class as T
+ * - or a subclass of T
+ */
+SubtypeOf(s, s) :-
+    isClassType(s).
+
+SubtypeOf(s, t) :-
+    Subclass(t, s).
+
+/**
+ * If T is an interface type, then
+ * - S must implement interface T
+ */
+SubtypeOf(s, t) :-
+    isClassType(s),
+    Superinterface(t, s).
+
+/**
+ * If S is an interface type, then
+ * - If T is a class type, then T must be Object
+ */
+SubtypeOf(s, t) :-
+    isInterfaceType(s),
+    isType(t),
+    t = "java.lang.Object".
+
+/**
+ * If T is an interface type, then
+ * - T must be the same interface as S
+ * - or a superinterface of S
+ */
+SubtypeOf(s, s) :-
+    isInterfaceType(s).
+
+SubtypeOf(s, t) :-
+    isInterfaceType(s),
+    Superinterface(t, s).
+
+/**
+ *  If S is a class representing the array type SC[], that is, an array of
+ *  components of type SC, then
+ *  - If T is a class type, then T must be Object
+ */
+SubtypeOf(s, t) :-
+    isArrayType(s),
+    isType(t),
+    t = "java.lang.Object".
+
+/**
+ *  If T is an array type TC[], that is, an array of components of type TC,
+ *  then one of the following must be true
+ *  - TC and SC are the same primitive type
+ */
+SubtypeOf(s, t) :-
+    isArrayType(s),
+    isArrayType(t),
+    ComponentType(s, sc),
+    ComponentType(t, sc),
+    isPrimitiveType(sc).
+
+
+/**
+ * - TC and SC are reference types (2.4.6), and type SC can be cast to TC by
+ * recursive application of these rules
+ */
+SubtypeOf(s, t) :-
+    ComponentType(s, sc),
+    ComponentType(t, tc),
+    isReferenceType(sc),
+    isReferenceType(tc),
+    SubtypeOf(sc, tc).
+
+/**
+ *  If T is an interface type, T must be one of the interfaces implemented by
+ *  arrays (2.15)
+ */
+SubtypeOf(s, t) :-
+    isArrayType(s),
+    isInterfaceType(t),
+    isType(t),
+    t = "java.lang.Cloneable".
+
+SubtypeOf(s, t) :-
+    isArrayType(s),
+    isInterfaceType(t),
+    isType(t),
+    t = "java.io.Serializable".
+
+
+/**
+ *  Null type acts as a bottom type
+ */
+SubtypeOf(s, t) :-
+    Type_null(s),
+    isReferenceType(t),
+    t != s.
+
+// Disable when performing type inference for Dalvik (Tsatiris)
+#ifndef TYPE_INFERENCE
+/**
+ * Subtyping among Primitive Types
+ */
+SubtypeOf(s, t) :-
+    Type_float(s),
+    Type_double(t).
+
+SubtypeOf(s, t) :-
+    Type_long(s),
+    Type_float(t).
+
+SubtypeOf(s, t) :-
+    Type_int(s),
+    Type_long(t).
+
+SubtypeOf(s, t) :-
+    Type_char(s),
+    Type_int(t).
+
+SubtypeOf(s, t) :-
+    Type_short(s),
+    Type_int(t).
+
+SubtypeOf(s, t) :-
+    Type_byte(s),
+    Type_short(t).
+#endif // TYPE_INFERENCE
+
+/**
+ * Each type is a subtype / supertype of itself
+ */
+SubtypeOf(t, t) :-
+    isType(t).
+
+
+// SubtypeOf minus the identity
+
+SubtypeOfDifferent(s, t) :-
+    SubtypeOf(s, t),
+    s != t.
+
+
+// Extra logic for determining whether it is possible to subclass a type (based on Oracle Souffle)
+
+Unsubclassable("java.lang.ClassLoader").
+Unsubclassable("java.lang.SecurityManager").
+
+
+// Subclassable
+
+Subclassable(type) :-
+    ClassModifier("public", type),
+    ! ClassModifier("final", type),
+    ClassConstructor(method, type),
+    Method_Modifier("public", method),
+    ! Unsubclassable(type).
+
+Subclassable(type) :-
+    ClassModifier("public", type),
+    ! ClassModifier("final", type),
+    ClassConstructor(method, type),
+    Method_Modifier("protected", method),
+    ! Unsubclassable(type).
+
+ClassConstructor(method, type) :-
+    isClassType(type),
+    MethodLookup(_, _, type, method),
+    isMethod(method),
+    match(".*<init>.*", method).
+
+// class is implemented/extended by subClass
+.decl Class_InterestingSubtype(class:ReferenceType, subClass:ReferenceType)
+.decl _Valid_Type(type:ReferenceType)
+
+Class_InterestingSubtype(class, subClass) :-
+  SubtypeOf(subClass, class),
+  _Valid_Type(class),
+  _Valid_Type(subClass).
+
+_Valid_Type(type) :-
+  isReferenceType(type),
+  (isClassType(type) ; isInterfaceType(type)).
+
+isIntegerType(type) :-
+  Type_byte(type) ; Type_short(type) ; Type_int(type) ; Type_long(type).

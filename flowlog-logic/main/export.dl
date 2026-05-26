@@ -1,0 +1,42 @@
+/*
+ * This file should contain only output directives.
+ * If there are no output directives, Souffle does not even run the analysis.
+ * Only the parts of the analysis that can affect the output are executed.
+ */
+
+#ifndef X_STATS_NONE
+// Metrics are always written, even when the other standard outputs are skipped.
+.output Stats_Metrics(IO="file",filename="Stats_Metrics.csv",delimiter="\t")
+#endif // X_STATS_NONE
+
+#ifndef NO_STANDARD_EXPORTS
+
+// It is possible to have multiple relations in an .output statement
+// e.g. .output CallGraphEdge, VarPointsTo
+
+.output CallGraphEdge(IO="file",filename="CallGraphEdge.csv",delimiter="\t")
+.output AnyCallGraphEdge(IO="file",filename="AnyCallGraphEdge.csv",delimiter="\t")
+#ifndef USER_DEFINED_PARTITIONS
+.output VarPointsTo(IO="file",filename="VarPointsTo.csv",delimiter="\t")
+.output ReachableContext(IO="file",filename="ReachableContext.csv",delimiter="\t")
+.output InstanceFieldPointsTo(IO="file",filename="InstanceFieldPointsTo.csv",delimiter="\t")
+.output StaticFieldPointsTo(IO="file",filename="StaticFieldPointsTo.csv",delimiter="\t")
+//.output ArrayIndexPointsTo(IO="file",filename="ArrayIndexPointsTo.csv",delimiter="\t")
+#else
+.output Stats_Simple_InsensVarPointsTo(IO="file",filename="VarPointsTo.csv",delimiter="\t")
+.output Stats_Simple_InsensCallGraphEdge(IO="file",filename="CallGraphEdge.csv",delimiter="\t")
+.output Stats_Simple_PotentiallyFailingCast(IO="file",filename="MayFailCast.csv",delimiter="\t")
+.output Stats_Simple_PolymorphicCallSite(IO="file",filename="PolymorphicCallSite.csv",delimiter="\t")
+.output Stats_Simple_Application_InsensVarPointsTo(IO="file",filename="VarPointsToApp.csv",delimiter="\t")
+.output Stats_Simple_Application_PotentiallyFailingCast(IO="file",filename="MayFailCastApp.csv",delimiter="\t")
+.output Stats_Simple_Application_PolymorphicCallSite(IO="file",filename="PolymorphicCallSiteApp.csv",delimiter="\t")
+.output Stats_Simple_Application_ReachableMethod(IO="file",filename="ReachableApp.csv",delimiter="\t")
+#endif // USER_DEFINED_PARTITIONS
+
+.output Reachable(IO="file",filename="Reachable.csv",delimiter="\t")
+
+// It is possible to output facts in an sqlite3 db.
+// .output CallGraphEdge(IO=sqlite, dbname="test.db", name=CallGraphEdge)
+// .output VarPointsTo(IO=sqlite, dbname="test.db", name=VarPointsTo)
+
+#endif // NO_STANDARD_EXPORTS

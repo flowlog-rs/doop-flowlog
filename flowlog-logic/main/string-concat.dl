@@ -1,0 +1,89 @@
+.decl StringFactoryVar(var:Var)
+.decl StringFactoryVarPointsTo(factoryHctx:configuration.HContext, factoryValue:Value, ctx:configuration.Context, var:Var)
+
+#ifdef REFLECTION_SUBSTRING_ANALYSIS
+
+/*************************************************************
+ * Analysis of reflection strings flowing through String factories
+ *************************************************************/
+
+StringFactoryVar(var) :-
+  StringFactoryType(type),
+  Var_Type(var, type).
+
+StringFactoryVarPointsTo(factoryHctx, factoryValue, ctx, var) :-
+  StringFactoryVar(var),
+  VarPointsTo(factoryHctx, factoryValue, ctx, var).
+
+.decl VarAssignedToStringFactoryVar(param:Var, base:Var)
+
+VarAssignedToStringFactoryVar(param, base) :-
+  VirtualMethodInvocation_SimpleName(invocation, "append"),
+  VirtualMethodInvocation_Base(invocation, base),
+  StringFactoryVar(base),
+  ActualParam(0, invocation, param).
+
+.decl VarAssignedFromStringFactoryVar(ret:Var, base:Var)
+
+VarAssignedFromStringFactoryVar(ret, base) :-
+  VirtualMethodInvocation_SimpleName(invocation, "toString"),
+  VirtualMethodInvocation_Base(invocation, base),
+  StringFactoryVar(base),
+  AssignReturnValue(invocation, ret).
+
+// There can be many variations of the code below: less precision
+// (merge reflection strings), less coverage (require that string
+// in/out operations on Builders/Buffers are in the same method).  The
+// current approach (precise) seems to work ok.
+.decl VarFlowsIntoStringFactory(factoryHctx:configuration.HContext, factoryValue:Value, ctx:configuration.Context, var:Var)
+
+VarFlowsIntoStringFactory(factoryHctx, factoryValue, ctx, var) :-
+  VarOfReflectionInterest(ctx, var),
+  VarAssignedToStringFactoryVar(var, factoryVar),
+  StringFactoryVarPointsTo(factoryHctx, factoryValue, ctx, factoryVar).
+
+.decl VarFlowsFromStringFactory(ctx:configuration.Context, var:Var, factoryHctx:configuration.HContext, factoryValue:Value)
+
+VarFlowsFromStringFactory(ctx, var, factoryHctx, factoryValue) :-
+  VarAssignedFromStringFactoryVar(var, factoryVar),
+  StringFactoryVarPointsTo(factoryHctx, factoryValue, ctx, factoryVar).
+
+.decl VarOfReflectionInterest(ctx:configuration.Context, var:Var)
+.decl ReflectionStringConstantVarPointsTo(hctx:configuration.HContext, value:Value, ctx:configuration.Context, var:Var)
+
+VarOfReflectionInterest(ctx, var),
+ReflectionStringConstantVarPointsTo(hctx, value, ctx, var) :-
+#ifdef REFLECTION_HIGH_SOUNDNESS_MODE
+  ReflectionStringConstant(value),
+#else
+  ReflectionSubstringObject(value),
+#endif // REFLECTION_HIGH_SOUNDNESS_MODE
+  VarPointsTo(hctx, value, ctx, var).
+
+.decl ReflectionStringConstantFlowsIntoStringFactory(hctx:configuration.HContext, value:Value, factoryHctx:configuration.HContext, factoryValue:Value)
+
+ReflectionStringConstantFlowsIntoStringFactory(hctx, value, factoryHctx, factoryValue) :-
+  VarFlowsIntoStringFactory(factoryHctx, factoryValue, ctx, var),
+  ReflectionStringConstantVarPointsTo(hctx, value, ctx, var).
+
+VarPointsTo(hctx, value, ctx, var) :-
+  ReflectionStringConstantFlowsIntoStringFactory(hctx, value, factoryHctx, factoryValue),
+  VarFlowsFromStringFactory(ctx, var, factoryHctx, factoryValue).
+
+#endif // REFLECTION_SUBSTRING_ANALYSIS
+
+.decl AssignInvokedynamic(insn:DynamicMethodInvocation_Insn, ret:Var, value:Value, type:Type)
+.output AssignInvokedynamic
+
+// Issue #46: Java 9+ string concatenation. If "x = makeConcatWithConstants(...)",
+// then make "x" point to a mock string concatenation result.
+// TODO: reflection substring analysis can be informed from the method arguments.
+AssignInvokedynamic(insn, ret, heap, "java.lang.String"),
+VarPointsTo(hctx, heap, ctx, ret),
+MockValueConsMacro(heap, "java.lang.String") :-
+  DynamicMethodInvocation_Bootstrap(insn, "<java.lang.invoke.StringConcatFactory: java.lang.invoke.CallSite makeConcatWithConstants(java.lang.invoke.MethodHandles$Lookup,java.lang.String,java.lang.invoke.MethodType,java.lang.String,java.lang.Object[])>"),
+  Instruction_Method(insn, method),
+  ReachableContext(ctx, method),
+  isImmutableHContext(hctx),
+  AssignReturnValue(insn, ret),
+  heap = "<mock string concatenation result>".

@@ -1,0 +1,56 @@
+.decl SpecialLibraryObject(heap:HeapAllocation)
+
+SpecialLibraryObject(heap) :-
+  AssignHeapAllocation_Heap(insn, heap),
+  Instruction_Method(insn, method),
+  SpecialLibraryMethod(method).
+
+.decl SpecialLibraryMethod(method:Method)
+SpecialLibraryMethod(method) :-
+  Method_DeclaringType(method, class),
+  SpecialLibraryClass(class).
+
+.decl SpecialLibraryClass(class:Type)
+SpecialLibraryClass(class) :-
+  isClassType(class),
+  !ApplicationClass(class),
+  !CollectionClass(class).
+
+.decl CollectionClass(class:Type)
+/*CollectionLibraryClass(class) :-
+  isClassType(class),
+  !ApplicationClass(class),
+  isType(class),
+  match("java[.]util.*", class).
+*/
+CollectionClass(class) :-
+  isClassType(class),
+  !ApplicationClass(class),
+  basic.SubtypeOf(class, superclass),
+  (superclass = "java.util.Map";
+   superclass = "java.util.Collection";
+   superclass = "java.util.Iterable";
+   superclass = "java.util.Iterator";
+   superclass = "java.util.Comparator";
+   superclass = "java.util.Dictionary";
+   superclass = "java.util.TimSort";
+   superclass = "java.util.ComparableTimSort";
+   superclass = "java.util.Arrays";
+   superclass = "java.util.Objects";
+   superclass = "java.util.Collections").
+
+.decl CollectionInnerClass(class:ClassType)
+
+CollectionInnerClass(innerClass),
+CollectionClass(innerClass) :-
+  CollectionInnerClassPrefix(innerClassPrefix),
+  isClassType(innerClass),
+  substr(innerClass, 0, strlen(innerClassPrefix)) = innerClassPrefix.
+
+.decl CollectionInnerClassPrefix(innerClassPrefix:symbol)
+
+CollectionInnerClassPrefix(innerClassPrefix) :-
+  CollectionClass(class),
+  innerClassPrefix = cat(class, "$").
+
+.output CollectionClass
