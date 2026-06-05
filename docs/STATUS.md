@@ -15,8 +15,8 @@ Where the project stands at the end of this session, so the next machine can pic
 
 **FlowLog engine state (`flowlog-rs/flowlog`):**
 
-Base features on `main-next`, plus the DOOP gap-fill PR stack
-#126 (`feat/doop-gap-fills`) → #127 (`…-round2`) → #128 (`…-round3`):
+Base features on `main-next`, plus the consolidated DOOP PR #129
+(`feat/doop-gap-fills-round4`, formerly the #126→#129 stack):
 
 | Feature | Status |
 | --- | --- |
@@ -30,15 +30,15 @@ Base features on `main-next`, plus the DOOP gap-fill PR stack
 | Multi-head rules with `,` separator | ✅ |
 | Parenthesized disjunction nested in conjunction `(A ; B)` | ✅ |
 | `.override` directive / `overridable` annotation | ✅ |
-| Body-position aggregates `r = op [e] : { body }` | ✅ (#126) |
-| Parenthesized arith at boundary `(a - b) <= 15`; `!(Atom)`; bare bool builtins | ✅ (#126) |
-| `match(re, s)` regex builtin (anchored, Soufflé semantics) | ✅ (#126) |
-| Enclosing-component relation resolution (ancestor-chain visibility) | ✅ (#127) |
-| Expression-valued atom args `R(idx - 1, x)`, `ord(h)`, `as(x,T)` | ✅ (#127) |
-| Declared-but-underived relations as empty EDBs (`!Empty(x)` always true) | ✅ (#128) |
+| Body-position aggregates `r = op [e] : { body }` | ✅ (#129) |
+| Parenthesized arith at boundary `(a - b) <= 15`; `!(Atom)`; bare bool builtins | ✅ (#129) |
+| `match(re, s)` regex builtin (anchored, Soufflé semantics) | ✅ (#129) |
+| Enclosing-component relation resolution (ancestor-chain visibility) | ✅ (#129) |
+| Expression-valued atom args `R(idx - 1, x)`, `ord(h)`, `as(x,T)` | ✅ (#129) |
+| Declared-but-underived relations as empty EDBs (`!Empty(x)` always true) | ✅ (#129) |
 | **Assignment binding** `t = "boolean"`, `calleeCtx = callerCtx` | ✅ (#129) |
 
-**End-to-end status:** with PRs #126–#129 the real `cpp`-preprocessed DOOP
+**End-to-end status:** with PR #129 the real `cpp`-preprocessed DOOP
 context-insensitive analysis **compiles end-to-end** (parse → ground →
 stratify → codegen → `cargo build` → binary) and the binary **runs**
 (`-w N`), emitting all 21 DOOP output relations (`VarPointsTo`,
@@ -66,8 +66,8 @@ In priority order:
 ### 1. Re-run the v1 smoke test against the gap-fill engine branches
 
 The iteration pattern is "find next error, fix, repeat". The gap chain below
-was mapped empirically against the engine's `feat/doop-gap-fills-round3`
-branch (PRs #126 → #127 → #128 on `flowlog-rs/flowlog`).
+was mapped empirically against the consolidated PR #129 (`feat/doop-gap-fills-round4`)
+on `flowlog-rs/flowlog`.
 
 **Two driver-side flags the earlier smoke procedure was missing** — without
 them the analysis fails on what *looks* like an engine bug but is actually
@@ -84,7 +84,7 @@ how DOOP invokes the toolchain:
 ```bash
 # build the engine at the gap-fill head
 cd /tmp && git clone https://github.com/flowlog-rs/flowlog.git
-cd flowlog && git checkout feat/doop-gap-fills-round3 && cargo build --release
+cd flowlog && git checkout feat/doop-gap-fills-round4 && cargo build --release
 export FLOWLOG_BIN=$PWD/target/release/flowlog-compiler
 
 # refresh the mirror
@@ -107,7 +107,7 @@ goes to `/tmp`; `flowlog-logic/` stays untouched. When the `FlowLogAnalysis`
 backend lands (action #3), it must pass `-DCONFIGURATION=<config>` and
 `--str-intern` the same way `SouffleAnalysis` does.
 
-### Gap chain (empirically mapped on `feat/doop-gap-fills-round3`)
+### Gap chain (empirically mapped on `feat/doop-gap-fills-round4`)
 
 Running the smoke above, in order encountered:
 
@@ -115,11 +115,11 @@ Running the smoke above, in order encountered:
 | - | ------- | ------ | ------ |
 | 1 | `unknown component CONFIGURATION` | driver: missing `-DCONFIGURATION=ContextInsensitiveConfiguration` cpp define | ✅ fixed in smoke/driver (above) |
 | 2 | `built-in 'ord' requires '--str-intern'` | driver: missing `--str-intern` flag | ✅ fixed in smoke/driver (above) |
-| 3 | `... not yet defined at this point` on `!HeapAllocation_Keep(h)` | engine: a declared-but-underived relation used in negation. Soufflé treats it as empty; FlowLog errored | ✅ fixed — **engine PR #128** (`feat/doop-gap-fills-round3`): prune registers declared-underived-but-referenced relations as empty EDBs. Soufflé-parity fixture `empty_relation_negation` |
-| 4 | `unsafe variable 't' in comparison 't == "boolean"` | engine: **assignment binding** (`t = "boolean"`, `calleeCtx = callerCtx`, …) — a variable defined by an equality, range-restricted by no positive atom | ✅ fixed — **engine PR #129** (`feat/doop-gap-fills-round4`): grounding desugar (substitute + empty-body→fact). Soufflé-parity fixture `assignment_binding` |
+| 3 | `... not yet defined at this point` on `!HeapAllocation_Keep(h)` | engine: a declared-but-underived relation used in negation. Soufflé treats it as empty; FlowLog errored | ✅ fixed — **engine PR #129** (consolidated): prune registers declared-underived-but-referenced relations as empty EDBs. Soufflé-parity fixture `empty_relation_negation` |
+| 4 | `unsafe variable 't' in comparison 't == "boolean"` | engine: **assignment binding** (`t = "boolean"`, `calleeCtx = callerCtx`, …) — a variable defined by an equality, range-restricted by no positive atom | ✅ fixed — **engine PR #129** (consolidated): grounding desugar (substitute + empty-body→fact). Soufflé-parity fixture `assignment_binding` |
 | 5 | `error[E0282]` (uninferrable EDB) + 18× `unused variable` | codegen: empty/intern EDB element types unpinned; grounding resurrected pruned-dead fact relations | ✅ fixed in #129 — EDB element-type pinning + fact-liveness pruning + `unused_variables` lint exemption |
 
-After #126–#129 the smoke compiles **all the way through `cargo build`** to a
+After PR #129 the smoke compiles **all the way through `cargo build`** to a
 168 MB binary that runs (`-w N`, EXIT 0) and emits all 21 DOOP output
 relations (`VarPointsTo`, `CallGraphEdge`, `Reachable`, …). The remaining work
 is integration, not language gaps (see below).
