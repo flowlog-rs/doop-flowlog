@@ -13,7 +13,10 @@ Where the project stands at the end of this session, so the next machine can pic
   - [`flowlog-v1-grammar-gaps.md`](flowlog-v1-grammar-gaps.md) — multi-head rules with `,` separator, parenthesized disjunction nested in conjunction. **Implemented on `main-next`.**
   - [`flowlog-override-spec.md`](flowlog-override-spec.md) — `.override Foo` directive inside `.comp` bodies (verified against Soufflé 2.4). **Implemented on `main-next`.**
 
-**FlowLog engine state (`flowlog-rs/flowlog` `main-next`):**
+**FlowLog engine state (`flowlog-rs/flowlog`):**
+
+Base features on `main-next`, plus the DOOP gap-fill PR stack
+#126 (`feat/doop-gap-fills`) → #127 (`…-round2`) → #128 (`…-round3`):
 
 | Feature | Status |
 | --- | --- |
@@ -24,12 +27,22 @@ Where the project stands at the end of this session, so the next machine can pic
 | Aggregates (count/min/max/sum) | ✅ |
 | Negation `!atom`, anonymous `_`, top-level disjunction `;` | ✅ |
 | Parametric `.input` / `.output` (`filename=`, `IO=`, `delimiter=`) | ✅ |
-| Multi-head rules with `,` separator | ✅ (just landed) |
-| Parenthesized disjunction nested in conjunction `(A ; B)` | ✅ (just landed) |
-| `.override` directive | ✅ (just landed) |
-| `overridable` annotation | ✅ (accepted natively) |
+| Multi-head rules with `,` separator | ✅ |
+| Parenthesized disjunction nested in conjunction `(A ; B)` | ✅ |
+| `.override` directive / `overridable` annotation | ✅ |
+| Body-position aggregates `r = op [e] : { body }` | ✅ (#126) |
+| Parenthesized arith at boundary `(a - b) <= 15`; `!(Atom)`; bare bool builtins | ✅ (#126) |
+| `match(re, s)` regex builtin (anchored, Soufflé semantics) | ✅ (#126) |
+| Enclosing-component relation resolution (ancestor-chain visibility) | ✅ (#127) |
+| Expression-valued atom args `R(idx - 1, x)`, `ord(h)`, `as(x,T)` | ✅ (#127) |
+| Declared-but-underived relations as empty EDBs (`!Empty(x)` always true) | ✅ (#128) |
+| **Assignment binding** `t = "boolean"`, `calleeCtx = callerCtx` | ⏭️ next gap (see action #2) |
+
+See the "Gap chain" table under Next concrete actions for the empirically
+mapped error sequence and which fix closed each.
 
 **doop-flowlog transform passes (`bin/flowlog-mirror.py`):**
+
 
 | Transform | Reason it exists |
 | --- | --- |
@@ -42,38 +55,88 @@ Where the project stands at the end of this session, so the next machine can pic
 
 In priority order:
 
-### 1. Re-run the v1 smoke test against updated `main-next`
+### 1. Re-run the v1 smoke test against the gap-fill engine branches
 
-The previous smoke found two grammar gaps in batch one. Both should now be fixed. There are probably more error classes we haven't seen yet — the iteration pattern is "find next error, write spec, hand off, repeat".
+The iteration pattern is "find next error, fix, repeat". The gap chain below
+was mapped empirically against the engine's `feat/doop-gap-fills-round3`
+branch (PRs #126 → #127 → #128 on `flowlog-rs/flowlog`).
+
+**Two driver-side flags the earlier smoke procedure was missing** — without
+them the analysis fails on what *looks* like an engine bug but is actually
+how DOOP invokes the toolchain:
+
+- `cpp` must define the configuration macro the analysis selects. DOOP's
+  `DoopAnalysisFactory.groovy` maps `context-insensitive →
+  ContextInsensitiveConfiguration` and passes it as `-DCONFIGURATION=...`.
+  Without it, `.init mainAnalysis = BasicContextSensitivity<CONFIGURATION>`
+  leaves `CONFIGURATION` unexpanded and the engine reports
+  `unknown component CONFIGURATION`.
+- the compiler needs `--str-intern` (DOOP uses `ord(...)`, which requires it).
 
 ```bash
-# rebuild the engine
+# build the engine at the gap-fill head
 cd /tmp && git clone https://github.com/flowlog-rs/flowlog.git
-cd flowlog && git checkout main-next && cargo build --release
+cd flowlog && git checkout feat/doop-gap-fills-round3 && cargo build --release
 export FLOWLOG_BIN=$PWD/target/release/flowlog-compiler
 
 # refresh the mirror
 cd /path/to/doop-flowlog
 python3 bin/flowlog-mirror.py context-insensitive --clean
 
-# assemble + run
+# assemble + run (note the -D define and --str-intern flag)
 mkdir -p /tmp/v1-smoke
-cpp -P flowlog-logic/facts/facts.dl > /tmp/v1-smoke/01-facts.dl
-cpp -P flowlog-logic/basic/basic.dl > /tmp/v1-smoke/02-basic.dl
-cpp -P flowlog-logic/analyses/context-insensitive/analysis.dl > /tmp/v1-smoke/03-analysis.dl
+DEF=-DCONFIGURATION=ContextInsensitiveConfiguration
+cpp -P $DEF flowlog-logic/facts/facts.dl                          > /tmp/v1-smoke/01-facts.dl
+cpp -P $DEF flowlog-logic/basic/basic.dl                          > /tmp/v1-smoke/02-basic.dl
+cpp -P $DEF flowlog-logic/analyses/context-insensitive/analysis.dl > /tmp/v1-smoke/03-analysis.dl
 cat /tmp/v1-smoke/{01-facts,02-basic,03-analysis}.dl > /tmp/v1-smoke/assembled.dl
-$FLOWLOG_BIN /tmp/v1-smoke/assembled.dl
+$FLOWLOG_BIN --str-intern /tmp/v1-smoke/assembled.dl
 ```
 
-If new error classes appear, write a `flowlog-v2-grammar-gaps.md` (or similar) batch and hand off. The smoke produced one fix per iteration in the previous round; expect a few more rounds.
+The cpp-assemble step matches what DOOP's `CPreprocessor.groovy` does today
+(per-file preprocess + concatenate to a throwaway flat file). The flat file
+goes to `/tmp`; `flowlog-logic/` stays untouched. When the `FlowLogAnalysis`
+backend lands (action #3), it must pass `-DCONFIGURATION=<config>` and
+`--str-intern` the same way `SouffleAnalysis` does.
 
-The cpp-assemble step matches what DOOP's `CPreprocessor.groovy` does today (per-file preprocess + concatenate to a throwaway flat file). The flat file goes to `/tmp`; `flowlog-logic/` stays untouched.
+### Gap chain (empirically mapped on `feat/doop-gap-fills-round3`)
 
-### 2. Drop the now-redundant `strip_overridable` transform
+Running the smoke above, in order encountered:
+
+| # | Symptom | Nature | Status |
+| - | ------- | ------ | ------ |
+| 1 | `unknown component CONFIGURATION` | driver: missing `-DCONFIGURATION=ContextInsensitiveConfiguration` cpp define | ✅ fixed in smoke/driver (above) |
+| 2 | `built-in 'ord' requires '--str-intern'` | driver: missing `--str-intern` flag | ✅ fixed in smoke/driver (above) |
+| 3 | `... not yet defined at this point` on `!HeapAllocation_Keep(h)` | engine: a declared-but-underived relation used in negation. Soufflé treats it as empty; FlowLog errored | ✅ fixed — **engine PR #128** (`feat/doop-gap-fills-round3`): prune registers declared-underived-but-referenced relations as empty EDBs. Soufflé-parity fixture `empty_relation_negation` |
+| 4 | `unsafe variable 't' in comparison 't == "boolean"` | engine: **assignment binding** (`t = "boolean"`, `calleeCtx = callerCtx`, …) — a variable defined by an equality, range-restricted by no positive atom | ⏭️ **next gap** (see below) |
+
+After fixes 1–3 the smoke reaches the assignment-binding gap (#4).
+
+### 2. Engine gap: assignment binding (the current blocker)
+
+`isPrimitiveType(t), Type_boolean(t) :- t = "boolean".` and friends bind a
+variable purely by equality. FlowLog requires every body variable to be
+range-restricted by a positive atom, so it rejects these. This is the gap
+PR #127 deferred. A **substitution-based desugar draft exists** on the engine
+repo's local `main-next` (`crates/flowlog-build/src/parser/grounding.rs`,
+unpushed) — it rewrites `v = w` / `v = const` / `v = expr` by substitution.
+Two pieces still needed before it lands cleanly on the PR stack:
+
+- adapt it to PR #127's `Predicate` enum (add the `BodyAggregate` arm to
+  `subst_pred` / `pred_mentions`);
+- **empty-body → fact conversion + multi-head split**: after grounding,
+  `A(t), B(t) :- t = "boolean".` becomes `A("boolean"), B("boolean").` — a
+  multi-head *fact* with an empty body. FlowLog parses single bare facts
+  (`A("boolean").`) but not the multi-head fact form, so the desugar must
+  emit one single-head fact per head. Validate byte-for-byte against
+  Soufflé 2.5, same as PRs #126–#128.
+
+### 3. Drop the now-redundant `strip_overridable` transform
 
 `bin/flowlog-mirror.py` currently strips `overridable`. Engine handles it natively now. Remove the `strip_overridable` function and its `TRANSFORMS` entry, re-mirror, confirm smoke still passes.
 
-### 3. Wire `FlowLogAnalysis.groovy` backend in DOOP
+
+### 4. Wire `FlowLogAnalysis.groovy` backend in DOOP
 
 Parallel to `src/main/groovy/org/clyze/doop/core/SouffleAnalysis.groovy`. Reuse `CPreprocessor` for assembly (same calls, just pointed at `flowlog-logic/` instead of `souffle-logic/`). Replace the Soufflé invocation with a new `FlowLogScript.groovy` parallel to `SouffleScript.groovy` that calls the `flowlog` binary.
 
@@ -88,15 +151,15 @@ src/main/groovy/org/clyze/doop/utils/FlowLogScript.groovy    # ~80 LOC, mirror o
 
 `mainAnalysis()` should call into `flowlog-logic/` instead of `souffle-logic/` — that path needs to be added to `Doop.groovy` alongside the existing `souffleLogicPath`.
 
-### 4. Pin `FLOWLOG_REF`
+### 5. Pin `FLOWLOG_REF`
 
 Once the engine has the four features above and the smoke parses clean, create `FLOWLOG_REF` at the repo root containing the engine commit hash. This is what the README quickstart instructs users to check out.
 
-### 5. End-to-end run on one DaCapo app
+### 6. End-to-end run on one DaCapo app
 
 The 20-app DaCapo fact corpus lives at `https://huggingface.co/datasets/NemoYuu/flowlog_benchmark/`. Pick `batik` (smallest, fastest to iterate). Run `FlowLogAnalysis` over it, get a `VarPointsTo.csv`.
 
-### 6. Cross-check vs Soufflé baseline
+### 7. Cross-check vs Soufflé baseline
 
 Run the same `context-insensitive` analysis through DOOP's existing `SouffleAnalysis` backend on the same `batik` corpus. Compare row counts per output relation; a script that does `wc -l` on each pair plus a sampled tuple-set diff is enough for v1 acceptance.
 
