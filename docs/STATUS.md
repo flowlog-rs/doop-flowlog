@@ -36,7 +36,15 @@ Base features on `main-next`, plus the DOOP gap-fill PR stack
 | Enclosing-component relation resolution (ancestor-chain visibility) | ✅ (#127) |
 | Expression-valued atom args `R(idx - 1, x)`, `ord(h)`, `as(x,T)` | ✅ (#127) |
 | Declared-but-underived relations as empty EDBs (`!Empty(x)` always true) | ✅ (#128) |
-| **Assignment binding** `t = "boolean"`, `calleeCtx = callerCtx` | ⏭️ next gap (see action #2) |
+| **Assignment binding** `t = "boolean"`, `calleeCtx = callerCtx` | ✅ (#129) |
+
+**End-to-end status:** with PRs #126–#129 the real `cpp`-preprocessed DOOP
+context-insensitive analysis **compiles end-to-end** (parse → ground →
+stratify → codegen → `cargo build` → binary) and the binary **runs**
+(`-w N`), emitting all 21 DOOP output relations (`VarPointsTo`,
+`CallGraphEdge`, `Reachable`, …). Remaining for a true Soufflé swap-in:
+wire the DOOP `FlowLogAnalysis` backend + run on a real fact corpus + diff
+outputs vs Soufflé (actions below).
 
 See the "Gap chain" table under Next concrete actions for the empirically
 mapped error sequence and which fix closed each.
@@ -108,28 +116,31 @@ Running the smoke above, in order encountered:
 | 1 | `unknown component CONFIGURATION` | driver: missing `-DCONFIGURATION=ContextInsensitiveConfiguration` cpp define | ✅ fixed in smoke/driver (above) |
 | 2 | `built-in 'ord' requires '--str-intern'` | driver: missing `--str-intern` flag | ✅ fixed in smoke/driver (above) |
 | 3 | `... not yet defined at this point` on `!HeapAllocation_Keep(h)` | engine: a declared-but-underived relation used in negation. Soufflé treats it as empty; FlowLog errored | ✅ fixed — **engine PR #128** (`feat/doop-gap-fills-round3`): prune registers declared-underived-but-referenced relations as empty EDBs. Soufflé-parity fixture `empty_relation_negation` |
-| 4 | `unsafe variable 't' in comparison 't == "boolean"` | engine: **assignment binding** (`t = "boolean"`, `calleeCtx = callerCtx`, …) — a variable defined by an equality, range-restricted by no positive atom | ⏭️ **next gap** (see below) |
+| 4 | `unsafe variable 't' in comparison 't == "boolean"` | engine: **assignment binding** (`t = "boolean"`, `calleeCtx = callerCtx`, …) — a variable defined by an equality, range-restricted by no positive atom | ✅ fixed — **engine PR #129** (`feat/doop-gap-fills-round4`): grounding desugar (substitute + empty-body→fact). Soufflé-parity fixture `assignment_binding` |
+| 5 | `error[E0282]` (uninferrable EDB) + 18× `unused variable` | codegen: empty/intern EDB element types unpinned; grounding resurrected pruned-dead fact relations | ✅ fixed in #129 — EDB element-type pinning + fact-liveness pruning + `unused_variables` lint exemption |
 
-After fixes 1–3 the smoke reaches the assignment-binding gap (#4).
+After #126–#129 the smoke compiles **all the way through `cargo build`** to a
+168 MB binary that runs (`-w N`, EXIT 0) and emits all 21 DOOP output
+relations (`VarPointsTo`, `CallGraphEdge`, `Reachable`, …). The remaining work
+is integration, not language gaps (see below).
 
-### 2. Engine gap: assignment binding (the current blocker)
+### 2. What remains: integration, not language gaps
 
-`isPrimitiveType(t), Type_boolean(t) :- t = "boolean".` and friends bind a
-variable purely by equality. FlowLog requires every body variable to be
-range-restricted by a positive atom, so it rejects these. This is the gap
-PR #127 deferred. A **substitution-based desugar draft exists** on the engine
-repo's local `main-next` (`crates/flowlog-build/src/parser/grounding.rs`,
-unpushed) — it rewrites `v = w` / `v = const` / `v = expr` by substitution.
-Two pieces still needed before it lands cleanly on the PR stack:
+The engine/language side for context-insensitive is **done** — DOOP compiles
+and runs (above). A true Soufflé swap-in now needs only integration work,
+detailed in the actions below: wire the `FlowLogAnalysis` backend (#4), pin
+`FLOWLOG_REF` (#5), run one DaCapo app (#6), and diff outputs vs Soufflé (#7).
 
-- adapt it to PR #127's `Predicate` enum (add the `BodyAggregate` arm to
-  `subst_pred` / `pred_mentions`);
-- **empty-body → fact conversion + multi-head split**: after grounding,
-  `A(t), B(t) :- t = "boolean".` becomes `A("boolean"), B("boolean").` — a
-  multi-head *fact* with an empty body. FlowLog parses single bare facts
-  (`A("boolean").`) but not the multi-head fact form, so the desugar must
-  emit one single-head fact per head. Validate byte-for-byte against
-  Soufflé 2.5, same as PRs #126–#128.
+For reference, the manual end-to-end probe (no facts) is:
+
+```bash
+DEF=-DCONFIGURATION=ContextInsensitiveConfiguration
+cpp -P $DEF flowlog-logic/facts/facts.dl                          > /tmp/v1-smoke/01.dl
+cpp -P $DEF flowlog-logic/basic/basic.dl                          > /tmp/v1-smoke/02.dl
+cpp -P $DEF flowlog-logic/analyses/context-insensitive/analysis.dl > /tmp/v1-smoke/03.dl
+cat /tmp/v1-smoke/0{1,2,3}.dl > /tmp/v1-smoke/assembled.dl
+$FLOWLOG_BIN --str-intern -F <facts-dir> --output-dir <out> /tmp/v1-smoke/assembled.dl
+```
 
 ### 3. Drop the now-redundant `strip_overridable` transform
 
