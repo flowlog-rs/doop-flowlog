@@ -172,9 +172,39 @@ The 20-app DaCapo fact corpus lives at `https://huggingface.co/datasets/NemoYuu/
 
 ### 7. Cross-check vs Soufflé baseline
 
-Run the same `context-insensitive` analysis through DOOP's existing `SouffleAnalysis` backend on the same `batik` corpus. Compare row counts per output relation; a script that does `wc -l` on each pair plus a sampled tuple-set diff is enough for v1 acceptance.
+Run the same `context-insensitive` analysis through Soufflé on the same `batik`
+corpus and diff the outputs with **`bin/compare-flowlog-souffle.py`** — the
+correctness oracle (pairs output relations case-insensitively, checks tuple-set
+equality, with a `--partition` mode for the `ord`-renaming representative
+relations and a hard failure when an expected relation is missing). This is what
+the README's `make compare` target should wrap.
 
-This is what the README's `make compare` target should eventually wrap.
+**Result (this session): 21/21 exact on batik.** FlowLog (the complete
+end-to-end engine — local draft `3c7c090`, which carries assignment-binding +
+the orphan-EDB fix) vs Soufflé 2.5 over the same DOOP fact corpus:
+`21 compared, 21 matched, 0 differ`, including `VarPointsTo` (28,249,074),
+`InstanceFieldPointsTo` (4,124,124) and `Instruction_Method` (1,724,131). Run
+single-threaded (`-w 1`): DOOP picks heap-merge representatives by
+`min ord(?heap)` and `ord` is the load-time intern order, so a single worker
+interns in fact-file order — matching Soufflé's symbol table — and both engines
+pick identical representatives. Under `-w 64` parallel loading the intern order
+shifts, so `min ord` picks a *different member of the same merge class*: the
+three representative-embedding relations (`VarPointsTo`, `InstanceFieldPointsTo`,
+`StaticFieldPointsTo`) then differ with *identical tuple counts* (same
+partitions, different representative). The `--partition` modes of the compare
+script check that equivalence directly for the 2-column representative relations.
+
+> Engine-track note: the 21/21 figure above was first recorded on the *old*
+> combination — the mirror-pre-desugaring tree
+> (`rewrite_aggregates`/`rewrite_atom_arith_args`, tag
+> `wip/session-old-approach`) on the complete draft engine. The
+> assignment-binding gap that previously blocked the thin, engine-native mirror
+> is now **closed** on the engine (PR #129, consolidated into PR #130 /
+> `feat/doop-end-to-end`, via `parser/desugar.rs`). The thin mirror on `master`
+> therefore now compiles end-to-end on the canonical PR engine; re-running the
+> oracle on that track to re-confirm the 21/21 (over a real fact corpus) is the
+> remaining verification step (actions #6–#7).
+
 
 ## v1 acceptance criteria (from the README target)
 
