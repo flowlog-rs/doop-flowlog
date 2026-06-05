@@ -46,3 +46,10 @@ profiler_html
 
 
 *.class
+# Python bytecode (e.g. bin/__pycache__ from flowlog-mirror.py)
+__pycache__/
+*.pyc
+
+# Analysis output relations dumped at the repo root by ad-hoc flowlog/DOOP runs
+# (VarPointsTo.csv, CallGraphEdge.csv, …). Regenerate via an analysis run.
+/*.csv

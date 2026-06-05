@@ -7,9 +7,12 @@ any analysis-specific addons we wire in later. Each reached file is copied to
 the matching path under flowlog-logic/, preserving the source-tree layout so
 humans can diff the two trees side by side.
 
-This first cut is identity-copy: no transforms applied yet. The
-FlowLog-specific passes (.comp/.init flatten, .plan strip, range rewrite,
-as()/<: erase, inline/overridable strip) layer in here as we build them.
+Per-file transforms (see `TRANSFORMS`) normalize Soufflé syntax FlowLog does
+not accept verbatim: `.plan` scheduler hints are stripped, the `?` variable
+prefix is removed, the `overridable` annotation is dropped, and the boolean
+string functors `match`/`contains` are equated (`f(...)` → `f(...) = True`).
+Soufflé-style aggregates (`v = min e : {...}`) are left untouched — FlowLog
+parses them natively.
 
 Usage:
   bin/flowlog-mirror.py <analysis-name>          # e.g. context-insensitive
@@ -37,7 +40,13 @@ FLOWLOG_LOGIC = REPO_ROOT / "flowlog-logic"
 # against the corresponding souffle-logic/ file stays readable.
 
 
-_PLAN_RE = re.compile(r"^\s*\.plan\b.*\n?", re.MULTILINE)
+# A `.plan` directive may span several lines when its per-overload clauses
+# (`1:(...), 2:(...), ...`) are wrapped. Strip the `.plan` line *and* any
+# trailing continuation clause lines so multi-version plans are fully removed.
+_PLAN_RE = re.compile(
+    r"^\s*\.plan\b.*(?:\n[ \t]*\d+:\([^)]*\)[ \t]*,?[ \t]*)*\n?",
+    re.MULTILINE,
+)
 _QMARK_VAR_RE = re.compile(r"\?(?=[A-Za-z_])")
 _OVERRIDABLE_RE = re.compile(r"\boverridable\b\s*")
 
@@ -70,10 +79,158 @@ def strip_overridable(text: str) -> str:
     return _OVERRIDABLE_RE.sub("", text)
 
 
+# The only two builtins FlowLog types as `bool` (engine:
+# `BuiltinOperator::Contains | BuiltinOperator::Match => DataType::Bool`).
+# Soufflé writes them as bare body constraints; FlowLog needs them equated.
+_BOOL_BUILTINS = ("match", "contains")
+_HSPACE = " \t"  # horizontal whitespace separating a `!`, keyword, `(` or `=`
+
+
+def _ident_char(ch: str) -> bool:
+    """True for characters that can be part of an identifier token."""
+    return ch.isalnum() or ch == "_"
+
+
+def _skip_protected(text: str, i: int) -> int | None:
+    """If a string literal or comment starts at `text[i]`, return the index
+    just past it; otherwise return None.
+
+    "Protected" regions are spans the boolean-builtin rewrite must copy
+    verbatim — a `match`/`contains` token inside them is not real code (e.g.
+    the fact `CollectionMethodSig("boolean contains(java.lang.Object)", "")`).
+    Strings honour `\\"` escapes; block comments run to `*/` (or EOF); line
+    comments stop *before* the newline so the newline itself is preserved.
+    """
+    n = len(text)
+    if text[i] == '"':
+        j = i + 1
+        while j < n:
+            if text[j] == "\\":
+                j += 2  # skip the escaped character
+            elif text[j] == '"':
+                return j + 1
+            else:
+                j += 1
+        return n  # unterminated string — protect to EOF
+    if text.startswith("//", i):
+        nl = text.find("\n", i)
+        return n if nl == -1 else nl
+    if text.startswith("/*", i):
+        end = text.find("*/", i + 2)
+        return n if end == -1 else end + 2
+    return None
+
+
+def _scan_bool_call(text: str, i: int) -> int | None:
+    """If a boolean-builtin call (`match(...)`/`contains(...)`) starts exactly
+    at `text[i]`, return the index just past its closing `)`; otherwise None.
+
+    The keyword must stand alone (word boundaries on both sides) and be
+    followed — across optional horizontal whitespace — by a parenthesised
+    argument list. The argument scan is protected-region aware, so a `)` inside
+    a string or comment argument does not close the call early.
+    """
+    n = len(text)
+    kw = next((k for k in _BOOL_BUILTINS if text.startswith(k, i)), None)
+    if kw is None:
+        return None
+    before = text[i - 1] if i > 0 else ""
+    j = i + len(kw)
+    after = text[j] if j < n else ""
+    if _ident_char(before) or _ident_char(after):
+        return None  # keyword is part of a longer identifier
+
+    while j < n and text[j] in _HSPACE:
+        j += 1
+    if j >= n or text[j] != "(":
+        return None  # not a call
+
+    depth = 0
+    while j < n:
+        skip = _skip_protected(text, j)
+        if skip is not None:
+            j = skip
+            continue
+        if text[j] == "(":
+            depth += 1
+        elif text[j] == ")":
+            depth -= 1
+            if depth == 0:
+                return j + 1
+        j += 1
+    return None  # unbalanced parentheses — leave untouched
+
+
+def _already_equated(text: str, end: int) -> bool:
+    """True if the first non-space character at/after `end` is `=` — i.e. the
+    call is already written as `f(...) = ...`, so re-running is idempotent."""
+    j = end
+    while j < len(text) and text[j] in _HSPACE:
+        j += 1
+    return j < len(text) and text[j] == "="
+
+
+def _match_bool_constraint(text: str, i: int) -> tuple[str, int] | None:
+    """At `text[i]`, match an optionally-negated bare boolean-builtin call and
+    return `(equated_form, end_index)`, or None if there is none.
+
+    A leading `!` (with optional whitespace before the keyword) flips the value
+    the call is equated against:
+
+        match(pat, s)     ->  match(pat, s) = True
+        !contains(n, hay) ->  contains(n, hay) = False
+
+    Calls already written as `f(...) = ...` return None so the pass is
+    idempotent.
+    """
+    negated = text[i] == "!"
+    call = i + 1 if negated else i
+    while negated and call < len(text) and text[call] in _HSPACE:
+        call += 1
+    end = _scan_bool_call(text, call)
+    if end is None or _already_equated(text, end):
+        return None
+    value = "False" if negated else "True"
+    return f"{text[call:end]} = {value}", end
+
+
+def rewrite_bool_builtins(text: str) -> str:
+    """Equate Soufflé's boolean string functors to FlowLog's value-functor form.
+
+    Soufflé writes `match(pat, s)` and `contains(needle, hay)` as bare boolean
+    body constraints (and `!...` to negate them). FlowLog types both as value
+    functors returning `bool`, so each bare use must become a comparison.
+    Occurrences inside string literals or comments are copied verbatim, and
+    already-equated calls are left alone (so the pass is idempotent).
+    """
+    out: list[str] = []
+    i = 0
+    n = len(text)
+    while i < n:
+        # Copy string literals and comments through untouched.
+        skip = _skip_protected(text, i)
+        if skip is not None:
+            out.append(text[i:skip])
+            i = skip
+            continue
+
+        # Rewrite a bare (optionally negated) boolean builtin to its equated form.
+        match = _match_bool_constraint(text, i)
+        if match is not None:
+            equated, i = match
+            out.append(equated)
+            continue
+
+        out.append(text[i])
+        i += 1
+    return "".join(out)
+
+
 TRANSFORMS = [
     ("strip_plan", strip_plan),
     ("strip_qmark_vars", strip_qmark_vars),
     ("strip_overridable", strip_overridable),
+    ("rewrite_bool_builtins", rewrite_bool_builtins),
 ]
 
 

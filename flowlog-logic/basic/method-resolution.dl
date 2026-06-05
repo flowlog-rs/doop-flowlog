@@ -58,6 +58,6 @@ MethodsOfSameOrSuperType(method1, method2) :-
 .decl MethodsOfSameNonSDKType(method1:Method, method2:Method, class:Type)
 MethodsOfSameNonSDKType(method1, method2, class) :-
   Method_DeclaringType(method1, class),
-  !match("java.*", class),
-  !match("sun.*", class),
+  match("java.*", class) = False,
+  match("sun.*", class) = False,
   Method_DeclaringType(method2, class).

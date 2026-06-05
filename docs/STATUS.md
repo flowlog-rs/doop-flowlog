@@ -33,9 +33,10 @@ Where the project stands at the end of this session, so the next machine can pic
 
 | Transform | Reason it exists |
 | --- | --- |
-| `strip_plan` | `.plan N:(...)` is Soufflé scheduler hint; FlowLog plans its own |
+| `strip_plan` | `.plan N:(...)` is Soufflé scheduler hint; FlowLog plans its own. Handles the multi-line form (`1:(...), 2:(...)` wrapped over several lines) too |
 | `strip_qmark_vars` | `?varname` is DOOP's LogiQL-era variable prefix; FlowLog rejects `?` in idents because it codegens to Rust (`proc_macro2::Ident`). Stripping is semantically a no-op — every variable consistently has `?`, so no collisions |
 | `strip_overridable` | `overridable` annotation; engine now accepts it natively, so this strip can be removed once we re-test |
+| `rewrite_bool_builtins` | `match(p,s)` and `contains(n,h)` are bare boolean constraints in Soufflé. FlowLog types both as `bool`-returning value functors, so each must be equated: `f(...)` → `f(...) = True`, `!f(...)` → `f(...) = False`. Comment- and string-literal-aware, so a builtin name inside a `//`/`/* */` comment or a `"..."` fact (e.g. `"boolean contains(java.lang.Object)"`) is never touched. Aggregates are deliberately *not* transformed — FlowLog accepts Soufflé-style `v = min e : {...}` natively |
 
 ## Next concrete actions
 

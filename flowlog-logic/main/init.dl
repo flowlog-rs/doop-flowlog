@@ -25,7 +25,7 @@ Value_Type(heapValue, type) :-
 .output ResourceType
 ResourceType(className) :-
   isReferenceType(className),
-  contains(".R$", className).
+  contains(".R$", className) = True.
 
 // R resources only define integer ids.
 .output NumConstantRawInt
