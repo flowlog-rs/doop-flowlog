@@ -7,13 +7,18 @@ any analysis-specific addons we wire in later. Each reached file is copied to
 the matching path under flowlog-logic/, preserving the source-tree layout so
 humans can diff the two trees side by side.
 
-Per-file transforms (see `TRANSFORMS`) normalize Soufflé syntax FlowLog does
-not accept verbatim: `.plan` scheduler hints are stripped, the `?` variable
-prefix is removed, the `overridable` annotation is dropped, and the boolean
-string functors `match`/`contains` are equated (`f(...)` → `f(...) = True`).
-Soufflé-style body aggregates (`v = min e : {...}`) are lowered here to
-FlowLog head aggregates (a fresh auxiliary IDB relation), so the engine stays
-clean and only ever evaluates native head aggregation.
+Per-file transforms (see `TRANSFORMS`, applied in order) normalize Soufflé
+syntax FlowLog does not accept verbatim:
+
+  * strip `.plan` scheduler hints, the `?` variable prefix, the `overridable`
+    and `inline` annotations (FlowLog plans/inlines on its own);
+  * normalize `.type`/`.number_type`/`.symbol_type` declarations;
+  * equate the boolean string functors `match`/`contains`
+    (`f(...)` → `f(...) = True`);
+  * lower Soufflé body aggregates (`v = op [e] : {...}`) to FlowLog head
+    aggregates (a fresh auxiliary IDB relation), so the engine stays clean and
+    only ever evaluates native head aggregation;
+  * hoist arithmetic out of positive-atom arguments (`R(idx - 1, x)`).
 
 Usage:
   bin/flowlog-mirror.py <analysis-name>          # e.g. context-insensitive
@@ -255,8 +260,6 @@ def _is_symbol_union(rhs: str) -> bool:
     return all(members) and not any(
         "[" in m or m in _NUMERIC_PRIMS for m in members
     )
-
-_BOOL_BUILTIN_RE = re.compile(r"(?<![\w.])(?:(!)[ \t]*)?\b(match|contains)\b[ \t]*\(")
 
 _DECL_RE = re.compile(r"\.decl\s+(\w+)\s*\(([^)]*)\)")
 
