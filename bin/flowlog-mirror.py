@@ -37,7 +37,21 @@ FLOWLOG_LOGIC = REPO_ROOT / "flowlog-logic"
 # against the corresponding souffle-logic/ file stays readable.
 
 
-_PLAN_RE = re.compile(r"^\s*\.plan\b.*\n?", re.MULTILINE)
+_PLAN_RE = re.compile(
+    # `.plan` is a Soufflé planner hint that may span multiple lines:
+    #
+    #   .plan 1:(2,1,3,4,5,6,7),
+    #          2:(3,1,2,4,5,6,7),
+    #          3:(4,1,2,3,5,6,7)
+    #
+    # The keyword line is followed by zero or more indented
+    # `<digit>:( ... )` continuation entries. We need to consume all of
+    # them — leaving an orphan continuation behind produces a syntax
+    # error in the consumer.
+    r"^\s*\.plan\b[^\n]*\n"
+    r"(?:[ \t]+\d+\s*:\s*\([^)]*\)\s*,?\s*\n)*",
+    re.MULTILINE,
+)
 _QMARK_VAR_RE = re.compile(r"\?(?=[A-Za-z_])")
 _OVERRIDABLE_RE = re.compile(r"\boverridable\b\s*")
 

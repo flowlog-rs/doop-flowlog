@@ -407,10 +407,6 @@ ArrayIndexPointsTo(hctx, value, basehctx, basevalue) :-
   Value_Type(basevalue, basevaluetype),
   ComponentType(basevaluetype, componenttype),
   basic.SupertypeOf(componenttype, valuetype).
-       2:(3,1,2,4,5,6,7),
-       3:(4,1,2,3,5,6,7),
-       4:(5,1,2,3,4,6,7)
-
 StoreHeapArrayIndex(basehctx, basevalue, ctx, from) :-
   ReachableStoreArrayIndexBase(base),
   OptStoreArrayIndex(from, base),
