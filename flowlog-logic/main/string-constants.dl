@@ -99,12 +99,16 @@ RepresentativesToPickFrom(heapRepr, heap) :-
   !HeapIsMergedString(heap),
   !HeapIsMergedStringFactory(heap),
   !HeapAllocation_Keep(heap).
+.decl _FlowLogAgg_min_16(g0:HeapAllocation, r:number)
+_FlowLogAgg_min_16(heap, min(ord(heapRepr))) :-
+  RepresentativesToPickFrom(heapRepr, heap).
+
 
 .decl MinRepresentativeHeapToPickFromOrdinal(minHeapReprOrd:number, heap:HeapAllocation)
 
 MinRepresentativeHeapToPickFromOrdinal(minHeapReprOrd, heap) :-
   RepresentativesToPickFrom(_, heap),
-  minHeapReprOrd = min ord(heapRepr): RepresentativesToPickFrom(heapRepr, heap).
+  _FlowLogAgg_min_16(heap, minHeapReprOrd).
 
 HeapAllocation_Merge(heap, mergeHeap) :-
   isHeapAllocation(mergeHeap),
@@ -255,6 +259,10 @@ StringGreaterThanOtherInSameClass(heap1, heap2, type) :-
   MethodOfClassMatchesString(heap1, type),
   MethodOfClassMatchesString(heap2, type),
   ord(heap1) > ord(heap2).
+.decl _FlowLogAgg_min_15(g0:HeapAllocation, g1:Type, r:number)
+_FlowLogAgg_min_15(heap, type, min(ord(h))) :-
+  StringGreaterThanOtherInSameClass(h, heap, type).
+
 
 .decl MinStringOrdinalGreaterThanOtherInSameClass(heap:HeapAllocation, heapGreaterOrd:number, type:Type)
 .decl StringImmediatelyLessThanOtherInClass(heap:HeapAllocation, type:Type, heapGreater:HeapAllocation)
@@ -262,7 +270,7 @@ StringGreaterThanOtherInSameClass(heap1, heap2, type) :-
 
 MinStringOrdinalGreaterThanOtherInSameClass(heap, heapGreaterOrd, type) :-
   StringGreaterThanOtherInSameClass(_, heap, type),
-  heapGreaterOrd = min ord(h): StringGreaterThanOtherInSameClass(h, heap, type).
+  _FlowLogAgg_min_15(heap, type, heapGreaterOrd).
 
 StringImmediatelyLessThanOtherInClass(heap, type, heapGreater) :-
   MinStringOrdinalGreaterThanOtherInSameClass(heap, heapGreaterOrd, type),
@@ -281,19 +289,27 @@ StringColorGreaterThan(0, heap) :-
 StringColorGreaterThan(num + 1, heap) :-
   StringImmediatelyGreaterThanOtherInSomeClass(heap, heapLower),
   StringColorGreaterThan(num, heapLower).
+.decl _FlowLogAgg_max_14(g0:HeapAllocation, r:number)
+_FlowLogAgg_max_14(heap, max((n))) :-
+  StringColorGreaterThan(n, heap).
+
 
 .decl StringColorForHeap(heap:HeapAllocation, color:number)
 
 StringColorForHeap(heap, color) :-
   StringColorGreaterThan(_, heap),
-  color = max (n): StringColorGreaterThan(n, heap).
+  _FlowLogAgg_max_14(heap, color).
+.decl _FlowLogAgg_min_13(g0:number, r:number)
+_FlowLogAgg_min_13(color, min(ord(heap))) :-
+  StringColorForHeap(heap, color).
+
 
 .decl MinStringOrdinalForColor(color:number, minHeapOrd:number)
 .decl StringRepresentativeForColor(color:number, heap:HeapAllocation)
 
 MinStringOrdinalForColor(color, minHeapOrd) :-
   StringColorForHeap(_, color),
-  minHeapOrd = min ord(heap): StringColorForHeap(heap, color).
+  _FlowLogAgg_min_13(color, minHeapOrd).
 
 StringRepresentativeForColor(color, mergeHeap) :-
   MinStringOrdinalForColor(color, minHeapOrd),
@@ -570,16 +586,14 @@ MethodNameSuffix(substr(methodName, index, length), sig) :-
   StringChangesCaseBeforePosition(index, methodName).
 
 MethodNamePrefix(substr(methodName, 0, length), sig) :-
-  ValidPrefixForMethod(sig, methodName, length),
-  StringChangesCaseAfterPosition(length - 1, methodName).
+  ValidPrefixForMethod(sig, methodName, length), _atomArg0 = length - 1, StringChangesCaseAfterPosition(_atomArg0, methodName).
 
 FieldNameSuffix(substr(fieldName, index, length), sig) :-
   ValidSuffixForField(sig, fieldName, index, length),
   StringChangesCaseBeforePosition(index, fieldName).
 
 FieldNamePrefix(substr(fieldName, 0, length), sig) :-
-  ValidPrefixForField(sig, fieldName, length),
-  StringChangesCaseAfterPosition(length - 1, fieldName).
+  ValidPrefixForField(sig, fieldName, length), _atomArg1 = length - 1, StringChangesCaseAfterPosition(_atomArg1, fieldName).
 
 //// Too costly!
 //ClassNameSuffix(type, suffix) <-
@@ -660,12 +674,16 @@ MethodAndTypeToHeap(heap, heaptype, meth) :-
   !HeapAllocation_EmptyArray(heap),
   !ObjectMultipleAllocated(heap),
   !HeapAllocation_Keep(heap).
+.decl _FlowLogAgg_count_12(g0:Type, g1:Method, r:number)
+_FlowLogAgg_count_12(type, meth, count(_agg_one)) :-
+  MethodAndTypeToHeap(_agg_one, type, meth).
+
 
 .decl AllocationsPerMethodAndType(type:Type, meth:Method, n:number)
 
 AllocationsPerMethodAndType(type, meth, n) :-
   MethodAndTypeToHeap(_, type, meth),
-  n = count : MethodAndTypeToHeap(_, type, meth).
+  _FlowLogAgg_count_12(type, meth, n).
 
 .decl AllocationShouldBeMergedPerMethod(heaptype:Type, meth:Method)
 
@@ -679,13 +697,17 @@ AllocationShouldBeMergedPerMethod(heaptype, meth) :-
 MethodAndTypeToMergedHeap(heap, heaptype, meth) :-
   AllocationShouldBeMergedPerMethod(heaptype, meth),
   MethodAndTypeToHeap(heap, heaptype, meth).
+.decl _FlowLogAgg_min_11(g0:Type, g1:Method, r:number)
+_FlowLogAgg_min_11(type, meth, min(ord(heap))) :-
+  MethodAndTypeToMergedHeap(heap, type, meth).
+
 
 .decl MinHeapOrdinalPerMethodAndType(ord:number, type:Type, meth:Method)
 .decl MethodAndTypeToRepresentative(type:Type, meth:Method, reprHeap:HeapAllocation)
 
 MinHeapOrdinalPerMethodAndType(minHeapOrd, type, meth) :-
   MethodAndTypeToMergedHeap(_, type, meth),
-  minHeapOrd = min ord(heap): MethodAndTypeToMergedHeap(heap, type, meth).
+  _FlowLogAgg_min_11(type, meth, minHeapOrd).
 
 MethodAndTypeToRepresentative(type, meth, representativeHeap) :-
   isHeapAllocation(representativeHeap),
@@ -706,10 +728,14 @@ HeapRepresentative(representativeHeap, heap) :-
 ClassAndTypeToHeap(heap, heaptype, class) :-
   MethodAndTypeToHeap(heap, heaptype, meth),
   Method_DeclaringType(meth, class).
+.decl _FlowLogAgg_count_10(g0:Type, g1:ReferenceType, r:number)
+_FlowLogAgg_count_10(type, class, count(_agg_one)) :-
+  ClassAndTypeToHeap(_agg_one, type, class).
+
 
 AllocationsPerClassAndType(type, class, n) :-
   ClassAndTypeToHeap(_, type, class),
-  n = count : ClassAndTypeToHeap(_, type, class).
+  _FlowLogAgg_count_10(type, class, n).
 
 // This is explicitly set for types that want it.
 .decl AllocationShouldBeMergedPerClass(heaptype:Type, class:Type)
@@ -719,13 +745,17 @@ AllocationsPerClassAndType(type, class, n) :-
 ClassAndTypeToMergedHeap(heap, heaptype, class) :-
   AllocationShouldBeMergedPerClass(heaptype, class),
   ClassAndTypeToHeap(heap, heaptype, class).
+.decl _FlowLogAgg_min_9(g0:Type, g1:Type, r:number)
+_FlowLogAgg_min_9(type, class, min(ord(heap))) :-
+  ClassAndTypeToMergedHeap(heap, type, class).
+
 
 .decl MinHeapOrdinalPerClassAndType(minHeapOrd:number, type:Type, class:Type)
 .decl ClassAndTypeToRepresentative(type:Type, class:Type, reprHeap:HeapAllocation)
 
 MinHeapOrdinalPerClassAndType(minHeapOrd, type, class) :-
   ClassAndTypeToMergedHeap(_, type, class),
-  minHeapOrd = min ord(heap): ClassAndTypeToMergedHeap(heap, type, class).
+  _FlowLogAgg_min_9(type, class, minHeapOrd).
 
 ClassAndTypeToRepresentative(type, class, representativeHeap) :-
   isHeapAllocation(representativeHeap),
@@ -746,10 +776,14 @@ HeapRepresentative(representativeHeap, heap) :-
 PackageAndTypeToHeap(heap, heaptype, packageName) :-
   ClassAndTypeToHeap(heap, heaptype, class),
   Class_PackageHack(class, packageName).
+.decl _FlowLogAgg_count_8(g0:Type, g1:symbol, r:number)
+_FlowLogAgg_count_8(type, packageName, count(_agg_one)) :-
+  PackageAndTypeToHeap(_agg_one, type, packageName).
+
 
 AllocationsPerPackageAndType(type, packageName, n) :-
   PackageAndTypeToHeap(_, type, packageName),
-  n = count : PackageAndTypeToHeap(_, type, packageName).
+  _FlowLogAgg_count_8(type, packageName, n).
 
 // This is explicitly set for types that want it.
 .decl AllocationShouldBeMergedPerPackage(heaptype:Type, packageName:symbol)
@@ -759,13 +793,17 @@ AllocationsPerPackageAndType(type, packageName, n) :-
 PackageAndTypeToMergedHeap(heap, heaptype, packageName) :-
   AllocationShouldBeMergedPerPackage(heaptype, packageName),
   PackageAndTypeToHeap(heap, heaptype, packageName).
+.decl _FlowLogAgg_min_7(g0:Type, g1:symbol, r:number)
+_FlowLogAgg_min_7(type, packageName, min(ord(heap))) :-
+  PackageAndTypeToMergedHeap(heap, type, packageName).
+
 
 .decl MinHeapOrdinalPerPackageAndType(minHeapOrd:number, type:Type, packageName:symbol)
 .decl PackageAndTypeToRepresentative(type:Type, packageName:symbol, representativeHeap:HeapAllocation)
 
 MinHeapOrdinalPerPackageAndType(minHeapOrd, type, packageName) :-
   PackageAndTypeToMergedHeap(_, type, packageName),
-  minHeapOrd = min ord(heap): PackageAndTypeToMergedHeap(heap, type, packageName).
+  _FlowLogAgg_min_7(type, packageName, minHeapOrd).
 
 PackageAndTypeToRepresentative(type, packageName, representativeHeap) :-
   isHeapAllocation(representativeHeap),
@@ -783,10 +821,14 @@ HeapRepresentative(representativeHeap, heap) :-
 
 TypeToHeap(heap, heaptype) :-
   ClassAndTypeToHeap(heap, heaptype, _).
+.decl _FlowLogAgg_count_6(g0:Type, r:number)
+_FlowLogAgg_count_6(type, count(_agg_one)) :-
+  TypeToHeap(_agg_one, type).
+
 
 AllocationsPerType(type, n) :-
   TypeToHeap(_, type),
-  n = count : TypeToHeap(_, type).
+  _FlowLogAgg_count_6(type, n).
 
 // This is explicitly set for types that want it.
 .decl AllocationShouldBeMergedGlobally(heaptype:Type)
@@ -796,13 +838,17 @@ AllocationsPerType(type, n) :-
 TypeToMergedHeap(heap, heaptype) :-
   AllocationShouldBeMergedGlobally(heaptype),
   TypeToHeap(heap, heaptype).
+.decl _FlowLogAgg_min_5(g0:Type, r:number)
+_FlowLogAgg_min_5(type, min(ord(heap))) :-
+  TypeToMergedHeap(heap, type).
+
 
 .decl MinHeapOrdinalPerType(minHeapOrd:number, type:Type)
 .decl TypeToRepresentative(type:Type, representativeHeap:HeapAllocation)
 
 MinHeapOrdinalPerType(minHeapOrd, type) :-
   TypeToMergedHeap(_, type),
-  minHeapOrd = min ord(heap): TypeToMergedHeap(heap, type).
+  _FlowLogAgg_min_5(type, minHeapOrd).
 
 TypeToRepresentative(type, representativeHeap) :-
   isHeapAllocation(representativeHeap),
@@ -891,13 +937,17 @@ PackageAndTypeToStringFactoryHeap(heap, heaptype, packageName) :-
   AssignHeapAllocation(heap, _, meth),
   Method_DeclaringType(meth, class),
   Class_PackageHack(class, packageName).
+.decl _FlowLogAgg_min_4(g0:Type, g1:symbol, r:number)
+_FlowLogAgg_min_4(type, packageName, min(ord(heap))) :-
+  PackageAndTypeToStringFactoryHeap(heap, type, packageName).
+
 
 .decl MinStringFactoryHeapOrdinalPerPackageAndType(minHeapOrd:number, type:Type, packageName:symbol)
 .decl PackageAndTypeToStringFactoryRepresentative(type:Type, packageName:symbol, representativeHeap:HeapAllocation)
 
 MinStringFactoryHeapOrdinalPerPackageAndType(minHeapOrd, type, packageName) :-
   PackageAndTypeToStringFactoryHeap(_, type, packageName),
-  minHeapOrd = min ord(heap): PackageAndTypeToStringFactoryHeap(heap, type, packageName).
+  _FlowLogAgg_min_4(type, packageName, minHeapOrd).
 
 PackageAndTypeToStringFactoryRepresentative(type, packageName, representativeHeap) :-
   MinStringFactoryHeapOrdinalPerPackageAndType(minHeapOrd, type, packageName),
@@ -972,12 +1022,16 @@ ExceptionTypeToHeap(heap, heaptype) :-
   AssignHeapAllocation(heap, _, _),
   HeapAllocation_Type(heap, heaptype),
   ExceptionType(heaptype).
+.decl _FlowLogAgg_min_3(g0:Type, r:number)
+_FlowLogAgg_min_3(type, min(ord(heap))) :-
+  ExceptionTypeToHeap(heap, type).
+
 
 .decl ExceptionHeapTypeRepresentativeOrdinal(type:Type, reprHeapOrd:number)
 
 ExceptionHeapTypeRepresentativeOrdinal(type, representativeHeapOrd) :-
   ExceptionTypeToHeap(_, type),
-  representativeHeapOrd = min ord(heap) : ExceptionTypeToHeap(heap, type).
+  _FlowLogAgg_min_3(type, representativeHeapOrd).
 
 #ifndef NO_MERGES
 HeapRepresentative(representativeHeap, heap) :-
@@ -1103,12 +1157,16 @@ Suffix(type, suffix, suffixLen) :-
 Suffix(type, type, suffixLen) :-
   isType(type),
   suffixLen = strlen(type).
+.decl _FlowLogAgg_min_2(g0:Type, r:number)
+_FlowLogAgg_min_2(type, min(len)) :-
+  Suffix(type, _, len).
+
 
 .decl MinimalSuffixLen(type:Type, suffixLen:number)
 
 MinimalSuffixLen(type, suffixLen) :-
   isType(type),
-  suffixLen = min len : Suffix(type, _, len).
+  _FlowLogAgg_min_2(type, suffixLen).
 
 // Computes the suffix after the last dot of a type name.
 .decl MinimalSuffix(type:Type, suffix:symbol)
