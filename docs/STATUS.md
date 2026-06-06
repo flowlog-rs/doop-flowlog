@@ -8,10 +8,12 @@ Where the project stands at the end of this session, so the next machine can pic
 
 - `bin/flowlog-mirror.py` — mirrors `souffle-logic/` → `flowlog-logic/` for one analysis, preserving folder structure, only the files actually needed (uses `cpp -M` to honor `#ifdef`). Applies per-file transforms: strip `.plan` directives, strip the `?varname` LogiQL-era variable prefix, strip the `overridable` annotation. Run with `python3 bin/flowlog-mirror.py context-insensitive --clean`.
 - `flowlog-logic/` — generated mirror for context-insensitive (44 .dl files under `basic/`, `main/`, `facts/`, `analyses/context-insensitive/`, plus `commonMacros.dl`). This is a build artifact; regenerate from `souffle-logic/` rather than hand-editing.
-- Three FlowLog engine hand-off specs in `docs/`:
-  - [`flowlog-components-spec.md`](flowlog-components-spec.md) — `.comp` / `.init` / parametric / inheritance. **Implemented on `main-next`.**
+- FlowLog engine hand-off specs. Only `flowlog-v1-grammar-gaps.md` is checked
+  into `docs/`; the `.comp`/`.init` and `.override` specs were folded into the
+  engine PRs on `main-next` and are not tracked in this repo:
+  - `flowlog-components-spec` — `.comp` / `.init` / parametric / inheritance. **Implemented on `main-next`** (spec not in this repo).
   - [`flowlog-v1-grammar-gaps.md`](flowlog-v1-grammar-gaps.md) — multi-head rules with `,` separator, parenthesized disjunction nested in conjunction. **Implemented on `main-next`.**
-  - [`flowlog-override-spec.md`](flowlog-override-spec.md) — `.override Foo` directive inside `.comp` bodies (verified against Soufflé 2.4). **Implemented on `main-next`.**
+  - `flowlog-override-spec` — `.override Foo` directive inside `.comp` bodies (verified against Soufflé 2.4). **Implemented on `main-next`** (spec not in this repo).
 
 **FlowLog engine state (`flowlog-rs/flowlog`):**
 
@@ -201,15 +203,16 @@ Auto-memory has the two project-level facts:
 - Project goal (Souffle → FlowLog port; cross-check against Soufflé baseline)
 - Decision to add `.comp` to the engine rather than pre-flatten in transform
 
-Both stored under `/users/zhhong/.claude/projects/-users-zhhong-doop-flowlog/memory/` and will follow into the next session if it runs on the same project path.
+Both are recorded in the agent's machine-local project memory (path is
+machine-specific, e.g. `~/.claude/projects/.../memory/`); they are not part of
+this repo and will only follow into a next session that runs on the same box.
 
 ## Quick links
 
 - Mirror script: [`bin/flowlog-mirror.py`](../bin/flowlog-mirror.py)
 - Generated mirror: [`flowlog-logic/`](../flowlog-logic/) (44 files for context-insensitive)
-- Engine spec 1: [`docs/flowlog-components-spec.md`](flowlog-components-spec.md)
-- Engine spec 2: [`docs/flowlog-v1-grammar-gaps.md`](flowlog-v1-grammar-gaps.md)
-- Engine spec 3: [`docs/flowlog-override-spec.md`](flowlog-override-spec.md)
+- Engine spec (in repo): [`docs/flowlog-v1-grammar-gaps.md`](flowlog-v1-grammar-gaps.md)
+- Engine specs `flowlog-components-spec` and `flowlog-override-spec` — folded into the `main-next` engine PRs; not tracked in this repo.
 - Upstream FlowLog: https://github.com/flowlog-rs/flowlog (branch `main-next`)
 - Upstream DOOP: https://github.com/plast-lab/doop
 - DaCapo fact corpus: https://huggingface.co/datasets/NemoYuu/flowlog_benchmark
