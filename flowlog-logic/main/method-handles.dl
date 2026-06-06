@@ -306,8 +306,7 @@ MethodHandleCGE_Arg(callerCtx, calleeCtx, actual, formal, actualType, formalType
   MethodHandleCallGraphEdge(callerCtx, invo, calleeCtx, method, _, name),
   !Method_Modifier("static", method),
   ActualParam(idx, invo, actual),
-  idx > 0,
-  FormalParam(idx - 1, method, formal),
+  idx > 0, _atomArg0 = idx - 1, FormalParam(_atomArg0, method, formal),
   Var_Type(actual, actualType),
   Var_Type(formal, formalType).
 // Pass arguments to static methods.
@@ -687,8 +686,7 @@ MethodVarArgs(method, idx, formal, type) :-
 // Normal handling for the last three arguments of the bootstrap method, shifted.
 BOUND_VAR_POINTS_TO(hctx, val, calleeCtx, formal) :-
   InvokedynamicBootCallGraphEdge(_, invokedynamic, calleeCtx, bootMethod),
-  !Method_Modifier("varargs", bootMethod),
-  FormalParam(idx + 3, bootMethod, formal),
+  !Method_Modifier("varargs", bootMethod), _atomArg1 = idx + 3, FormalParam(_atomArg1, bootMethod, formal),
   BootstrapParam(idx, invokedynamic, actual),
   VarPointsTo(hctx, val, _, actual).
 #endif // DISABLE_POINTS_TO
@@ -896,8 +894,7 @@ LambdaArg(calleeCtx, formal, formalType, actual, invokedynamic) :-
   LambdaCallGraphEdge(_, i, calleeCtx, implMethod, lambda),
   Params_ReceiverShiftRight(lambda, implMethod, shiftK, shiftN),
   LambdaObject(invokedynamic, lambda, _, K, implMethod, _),
-  ActualParam(idx, i, actual),
-  FormalParam(K - shiftK + idx - shiftN, implMethod, formal),
+  ActualParam(idx, i, actual), _atomArg2 = K - shiftK + idx - shiftN, FormalParam(_atomArg2, implMethod, formal),
   Var_Type(formal, formalType).
 
 #ifndef DISABLE_POINTS_TO
@@ -953,8 +950,7 @@ BOUND_VAR_POINTS_TO(hctx, val, calleeCtx, formal) :-
   Params_ReceiverShiftRight(lambda, implMethod, shiftK, _),
   LambdaObject(invokedynamic, lambda, _, K, implMethod, _),
   LambdaCaptured(invokedynamic, val, idx, hctx),
-  idx + shiftK <= K,
-  FormalParam(idx - shiftK, implMethod, formal),
+  idx + shiftK <= K, _atomArg3 = idx - shiftK, FormalParam(_atomArg3, implMethod, formal),
   Value_Type(val, valType),
   Var_Type(formal, formalType),
   basic.SubtypeOf(valType, formalType).
