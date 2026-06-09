@@ -307,7 +307,8 @@ MethodHandleCGE_Arg(callerCtx, calleeCtx, actual, formal, actualType, formalType
   !Method_Modifier("static", method),
   ActualParam(idx, invo, actual),
   idx > 0,
-  FormalParam(idx - 1, method, formal),
+  FormalParam(fidx, method, formal),
+  fidx = idx - 1,
   Var_Type(actual, actualType),
   Var_Type(formal, formalType).
 // Pass arguments to static methods.
@@ -688,7 +689,8 @@ MethodVarArgs(method, idx, formal, type) :-
 BOUND_VAR_POINTS_TO(hctx, val, calleeCtx, formal) :-
   InvokedynamicBootCallGraphEdge(_, invokedynamic, calleeCtx, bootMethod),
   !Method_Modifier("varargs", bootMethod),
-  FormalParam(idx + 3, bootMethod, formal),
+  FormalParam(fidx, bootMethod, formal),
+  fidx = idx + 3,
   BootstrapParam(idx, invokedynamic, actual),
   VarPointsTo(hctx, val, _, actual).
 #endif // DISABLE_POINTS_TO
@@ -897,7 +899,8 @@ LambdaArg(calleeCtx, formal, formalType, actual, invokedynamic) :-
   Params_ReceiverShiftRight(lambda, implMethod, shiftK, shiftN),
   LambdaObject(invokedynamic, lambda, _, K, implMethod, _),
   ActualParam(idx, i, actual),
-  FormalParam(K - shiftK + idx - shiftN, implMethod, formal),
+  FormalParam(fidx, implMethod, formal),
+  fidx = K - shiftK + idx - shiftN,
   Var_Type(formal, formalType).
 
 #ifndef DISABLE_POINTS_TO
@@ -954,7 +957,8 @@ BOUND_VAR_POINTS_TO(hctx, val, calleeCtx, formal) :-
   LambdaObject(invokedynamic, lambda, _, K, implMethod, _),
   LambdaCaptured(invokedynamic, val, idx, hctx),
   idx + shiftK <= K,
-  FormalParam(idx - shiftK, implMethod, formal),
+  FormalParam(fidx, implMethod, formal),
+  fidx = idx - shiftK,
   Value_Type(val, valType),
   Var_Type(formal, formalType),
   basic.SubtypeOf(valType, formalType).

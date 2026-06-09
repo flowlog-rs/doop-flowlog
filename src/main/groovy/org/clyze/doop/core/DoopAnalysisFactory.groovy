@@ -168,7 +168,9 @@ class DoopAnalysisFactory implements AnalysisFactory<DoopAnalysis> {
 		if (options.X_LB3.value)
 			return new LB3Analysis(options, context, commandsEnv)
 		else {
-			if (options.PYTHON.value) {
+			if (options.ENGINE.value == DoopAnalysisFamily.ENGINE_FLOWLOG) {
+				return new FlowLogAnalysis(options, context, commandsEnv)
+			} else if (options.PYTHON.value) {
 				return new SoufflePythonAnalysis(options, context, commandsEnv)
 			} else if (options.USER_DEFINED_PARTITIONS.value) {
 				return new SoufflePartitionedAnalysis(options, context, commandsEnv)
@@ -220,6 +222,8 @@ class DoopAnalysisFactory implements AnalysisFactory<DoopAnalysis> {
 		log.debug "Verifying analysis name: $name"
 		if (options.X_LB3.value)
 			FileOps.findFileOrThrow("${Doop.lbAnalysesPath}/${name}/analysis.logic", "Unsupported analysis: $name")
+		else if (options.ENGINE.value == DoopAnalysisFamily.ENGINE_FLOWLOG)
+			FileOps.findFileOrThrow("${Doop.flowlogAnalysesPath}/${name}/analysis.dl", "Unsupported FlowLog analysis: $name")
 		else
 			FileOps.findFileOrThrow("${Doop.souffleAnalysesPath}/${name}/analysis.dl", "Unsupported analysis: $name")
 	}

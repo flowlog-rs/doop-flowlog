@@ -63,9 +63,12 @@ _MethodLookup_ClassResolution(simplename, descriptor, type, method) :-
     Method_DeclaringType(method, supertype),
     isClassType(supertype).
 
+.decl _MethodLookup_MinLen(simplename:symbol, descriptor:MethodDescriptor, type:ReferenceType, minLen:number)
+_MethodLookup_MinLen(simplename, descriptor, type, min(len)) :-
+    _MethodLookup_WithLen(simplename, descriptor, type, _, len).
 _MethodLookup_ClosestInterface(simplename, descriptor, type, method) :-
     _MethodLookup_MoreThanOne(simplename, descriptor, type),
-    minLen = min len : { _MethodLookup_WithLen(simplename, descriptor, type, _, len) },
+    _MethodLookup_MinLen(simplename, descriptor, type, minLen),
     _MethodLookup_WithLen(simplename, descriptor, type, method, minLen),
     !_MethodLookup_ClassResolution(simplename, descriptor, type, _).
 
