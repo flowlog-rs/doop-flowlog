@@ -56,23 +56,23 @@
 
   .decl Method_NumberOfContexts(method:Method, n:number)
 
-    Method_NumberOfContexts(method, n) :-
+    Method_NumberOfContexts(method, count(c)) :-
       Reachable(method),
-      n =  count : {ReachableContext(_, method)}.
+      ReachableContext(c, method).
 
     .output Method_NumberOfContexts
 
     .decl VPTCountPerMethodVariable(method:Method, var:Var, n:number)
 
-    VPTCountPerMethodVariable(method, var, Y) :-
+    VPTCountPerMethodVariable(method, var, count(v)) :-
        Var_DeclaringMethod(var, method),
-       Y =  count : {mainAnalysis.VarPointsTo(_, _, _, var)}.
+       mainAnalysis.VarPointsTo(v, _, _, var).
 
     .decl MethodTotalVPT(method:Method, Y:number)
 
-    MethodTotalVPT(method, Y) :-
+    MethodTotalVPT(method, sum(n)) :-
       mainAnalysis.Reachable(method),
-      Y = sum n : {VPTCountPerMethodVariable(method, _, n)}.
+      VPTCountPerMethodVariable(method, _, n).
 
     MethodTotalVPT(method, 0) :-
       mainAnalysis.Reachable(method),
@@ -275,23 +275,23 @@
 
     .decl Method_NumberOfContexts(method:Method, n:number)
 
-    Method_NumberOfContexts(method, n) :-
+    Method_NumberOfContexts(method, count(c)) :-
       Reachable(method),
-      n =  count : {ReachableContext(_, method)}.
+      ReachableContext(c, method).
 
     .output Method_NumberOfContexts
 
     .decl VPTCountPerMethodVariable(method:Method, var:Var, n:number)
 
-    VPTCountPerMethodVariable(method, var, Y) :-
+    VPTCountPerMethodVariable(method, var, count(v)) :-
        Var_DeclaringMethod(var, method),
-       Y =  count : {mainAnalysis.VarPointsTo(_, _, _, var)}.
+       mainAnalysis.VarPointsTo(v, _, _, var).
 
     .decl MethodTotalVPT(method:Method, Y:number)
 
-    MethodTotalVPT(method, Y) :-
+    MethodTotalVPT(method, sum(n)) :-
       mainAnalysis.Reachable(method),
-      Y = sum n : {VPTCountPerMethodVariable(method, _, n)}.
+      VPTCountPerMethodVariable(method, _, n).
 
     MethodTotalVPT(method, 0) :-
       mainAnalysis.Reachable(method),
