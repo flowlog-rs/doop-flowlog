@@ -1,0 +1,37 @@
+// In this analysis, the real context and the real heap context are a Type and
+// a Value.
+
+#include "../../main/single-phase-analysis.dl"
+#include "../../main/configuration.dl"
+
+.comp TwoTypeObjectSensitivePlusTwoHeapConfiguration : AbstractConfiguration {
+
+  .type Context  = ( type:Type, value:Value )
+  .type HContext = ( type:Type, value:Value )
+
+  ContextResponse(callerCtx, hctx, invo, value, tomethod, calleeCtx) :-
+    ContextRequest(callerCtx, hctx, invo, value, tomethod, _),
+    hctx = (hctxType, hctxValue),
+    Value_DeclaringType(hctxValue, type),
+    calleeCtx = (type, value),
+    hctxType = hctxType.
+
+  StaticContextResponse(callerCtx, invo, calleeCtx) :-
+    StaticContextRequest(callerCtx, invo),
+    calleeCtx = callerCtx.
+
+  RecordContextResponse(ctx, value, var, hctx) :-
+    RecordContextRequest(ctx, value, var),      
+    ctx = (ctxType, ctxValue),
+    hctx = (ctxType, ctxValue).
+
+  InitContextResponse(value, ctx) :-
+    InitContextRequest(value),
+    ctx = ("Java.lang.String", value).
+
+  InitHContextResponse(value, hctx) :-
+     InitHContextRequest(value),
+     hctx = ("Java.lang.String", value).
+
+
+}

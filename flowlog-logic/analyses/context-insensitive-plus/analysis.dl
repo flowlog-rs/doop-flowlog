@@ -1,0 +1,72 @@
+// Context-insensitive with an enhancement for low-hanging fruit:
+// methods that have their params flow to their return value get a
+// 1-call treatment.
+
+#include "../../main/single-phase-analysis.dl"
+#include "../../main/configuration.dl"
+#include "../../main/in-out-flow.dl"
+
+.type UniqueContext
+
+.comp ContextInsensitivePlusConfiguration : AbstractConfiguration {
+
+.type Context = MethodInvocation | UniqueContext
+.type HContext = symbol
+
+.decl UContext(ctx:UniqueContext)
+.decl UHContext(hctx:HContext)
+
+#define UNIQUE_CONTEXT  "<<unique-context>>"
+#define UNIQUE_HCONTEXT "<<unique-hcontext>>"
+
+UContext(UNIQUE_CONTEXT).
+UHContext(UNIQUE_HCONTEXT).
+
+.decl _InOutFlowMethod(method:Method)
+
+_InOutFlowMethod(method) :-
+  InOutFlowMethod(_, method).
+  
+ContextResponse(callerCtx, hctx, invo, value, tomethod, invo) :-
+  ContextRequest(callerCtx, hctx, invo, value, tomethod, _),
+  _InOutFlowMethod(tomethod).
+
+ContextResponse(callerCtx, hctx, invo, value, tomethod, calleeCtx) :-
+  ContextRequest(callerCtx, hctx, invo, value, tomethod, _),
+  !_InOutFlowMethod(tomethod),
+  UContext(calleeCtx).
+
+StaticContextResponse(callerCtx, invo, invo) :-
+  StaticContextRequest(callerCtx, invo),
+  MethodInvocation_Method(invo, tomethod),
+  _InOutFlowMethod(tomethod).
+
+StaticContextResponse(callerCtx, invo, calleeCtx) :-
+  StaticContextRequest(callerCtx, invo),
+  MethodInvocation_Method(invo, tomethod),
+  !_InOutFlowMethod(tomethod),
+  UContext(calleeCtx).
+
+RecordContextResponse(ctx, value, var, hctx) :-
+  RecordContextRequest(ctx, value, var),      
+  UHContext(hctx).
+
+InitContextResponse(s, ctx) :-
+  UContext(ctx),                   
+  InitContextRequest(s).
+
+InitHContextResponse(s, hctx) :-
+  UHContext(hctx),
+  InitHContextRequest(s).
+
+#ifdef HEAPDLS
+ DynamicContextToContext(ctx, dctx) :-
+   isDynamicContext(dctx),
+   isImmutableContext(ctx).
+
+DynamicContextToHContext(hctx, dctx) :-
+   isDynamicContext(dctx),
+   isImmutableHContext(hctx).
+#endif // HEAPDLS
+
+}
