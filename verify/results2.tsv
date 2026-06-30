@@ -1,0 +1,10 @@
+family	fl_build	fl_run	fl_vpt	sf_build	sf_run	sf_vpt	only_fl	only_sf	both	verdict
+1-object-1-type-sensitive+heap	0	0	8719851	1	0	8719851	0	0	8719851	MATCH
+2-type-sensitive+heap	0	0	4859195	1	0	4859195	0	0	4859195	MATCH
+2-type-object-sensitive+heap	0	0	8719851	1	0	8719851	0	0	8719851	MATCH
+adaptive-2-object-sensitive+heap	0	0	8741742	1	0	8741742	0	0	8741742	MATCH
+2-object-sensitive+heap	0	0	8741742	1	0	8741742	0	0	8741742	MATCH
+3-type-sensitive+2-heap	0	0	1483057	1	0	1483057	0	0	1483057	MATCH
+3-object-sensitive+2-heap	0	0	3411656	1	0	3411656	0	0	3411656	MATCH
+2-call-site-sensitive+heap	0	137	NA	1	137	NA	NA	NA	NA	INCOMPLETE
+partitioned-2-object-sensitive+heap	0	0	8730757	1	1	NA	NA	NA	NA	INCOMPLETE

@@ -1,194 +1,187 @@
-# FlowLog engine spec — record types for DOOP context-sensitive analyses
+# FlowLog engine spec — record types (fixed-tuple representation) for DOOP context-sensitive analyses
 
-Hand-off spec for the FlowLog engine (`flowlog-rs/flowlog`, branch `main-next`),
-in the same shape as the three specs already implemented
-([`flowlog-components-spec.md`](flowlog-components-spec.md),
-[`flowlog-v1-grammar-gaps.md`](flowlog-v1-grammar-gaps.md),
-[`flowlog-override-spec.md`](flowlog-override-spec.md)).
+Hand-off spec for the FlowLog engine (`flowlog-rs/flowlog`), in the same shape
+as the implemented specs (`flowlog-components-spec.md`,
+`flowlog-v1-grammar-gaps.md`, `flowlog-override-spec.md`).
 
 **This is the single gap blocking the entire context-sensitive analysis family.**
 With it, ~30 of DOOP's 37 analyses become reachable; without it, only the
-context-insensitive family compiles (5 analyses today: `context-insensitive`,
-`context-insensitive-plus`, `basic-only`, `types-only`, `micro`).
+context-insensitive family compiles (`context-insensitive`,
+`context-insensitive-plus(plus)`, `basic-only`, `types-only`, `micro`).
 
-> Note: `docs/STATUS.md` previously listed records as "✅ supported on
-> `main-next`". That was aspirational — the grammar has no record form (verified
-> against `crates/flowlog-build/src/parser/grammar.pest`, where
-> `type_ref = { data_type | alias_name }` and there is no record production).
-> STATUS.md has been corrected.
+> Note: an earlier draft of this spec recommended a **string-encoding**
+> representation (mirroring Soufflé's interned record-table id). After analysis
+> (below), the decision is a **fixed-tuple** representation for the flat
+> context-sensitive family, which is faster on DOOP's long-signature components
+> (no per-op interning) and reuses FlowLog's existing tuple-row codegen. The
+> string-encoding is reserved, behind a representation seam, for the recursive
+> niche families only.
 
-## Setup to reproduce
+## Scope
 
-```bash
-# in the doop-flowlog repo, with FLOWLOG_BIN pointing at the main-next compiler:
-python3 bin/flowlog-mirror.py 1-call-site-sensitive --clean
-CONF=OneCallSiteSensitiveConfiguration
-for f in facts/facts basic/basic analyses/1-call-site-sensitive/analysis; do
-  cpp -P -DCONFIGURATION=$CONF flowlog-logic/$f.dl
-done > /tmp/1cs.dl
-$FLOWLOG_BIN --str-intern /tmp/1cs.dl -o /tmp/exec -D /tmp/out
-# error: syntax error: expected type_ref
-#   .type Context = [ invocation:MethodInvocation ]
-```
+- **Ship now:** flat record types via a **fixed-tuple** representation. This
+  covers the entire mainstream points-to hierarchy (all `Context`/`HContext`
+  records — arity ≤ 4, every field symbol-typed, no recursion).
+- **Build the front-end general:** grammar / type-system / IR must *parse and
+  type* recursive record declarations too (they cost nothing extra to parse),
+  and codegen must go through a **`RecordRepr` seam**, so the recursive niche
+  families (`sound-may-point-to`, `xtractor`) can later be added as a *second*
+  codegen lowering (string-encoding) **without a front-end rewrite**.
+- **Do not build now:** the recursive/string lowering, trees, `nil`, sum-type
+  ADTs, `.functor`, double-underscore relation names. All niche, all separate.
 
-## What DOOP writes (and Soufflé accepts)
+## Semantics (the whole feature)
 
-DOOP encodes a calling/heap context as a **record** — a fixed-arity tuple of
-symbol-rooted components. Three surface forms appear:
+A record type `T = [f0:T0, …, fk:Tk]` is a **fixed-arity, immutable tuple** — a
+single-column value. It supports exactly three operations; there is **no
+indexing, no field access, no length, no iteration**:
 
-**1. Record type declaration** (in a `.comp` configuration body):
+1. **construct (whole):** `x = [a, b]` — as the RHS of an equality or a head-atom
+   argument; builds the value from its (bound) components.
+2. **destructure (whole):** `[a, b]` matched against a **bound** `x` — binds free
+   components positionally and equality-filters already-bound ones (exactly like
+   Rust `let (a, b) = x`). This is the k-CFA context shift.
+3. **equality / join key:** componentwise equality. The record is a **join key**
+   in nearly every context-sensitive rule (the `ctx`/`hctx` column), so it must
+   hash and compare by content.
 
-```souffle
-.type Context  = [ invocation:MethodInvocation ]                 // 1-call-site
-.type Context  = [ value1:Value, value2:Value ]                  // 2-object
-.type Context  = [ type1:Type, type2:Type, type3:Type ]          // 3-type
-.type HContext = [ value:Value ]
-```
+`ord(record)` must be supported: two analyses (`2-object-sensitive+heap`,
+`3-object-sensitive+2-heap`) compute `(ord(value) * ord(hctx)) % 101` as a hash
+bound, where `hctx` is a record.
 
-**2. Record construction** — a record literal that *binds* a value, either as
-the RHS of an equality or as a head atom argument:
+**Input:** records never appear in EDB facts — contexts are *constructed* by
+rules at runtime. **The fact reader needs no record logic.**
 
-```souffle
-ContextResponse(?callerCtx, ?hctx, ?invo, ?value, ?tomethod, ?calleeCtx) :-
-  ContextRequest(?callerCtx, ?hctx, ?invo, ?value, ?tomethod, _),
-  ?calleeCtx = [?invo].                       //  <- construct from one component
+**Output:** a record column must be serialized as **`[a, b]`** (Soufflé's bracket
+form, each component resolved to its string) so the correctness oracle matches.
 
-DynamicContextToContext([?value], ?dynCtx) :- ...   //  <- construct in head
-```
+## What DOOP writes (audited across the whole framework)
 
-**3. Record destructuring / pattern match** — the *same* literal syntax with the
-record value already bound, extracting (or constraining) its components. This is
-the k-CFA window shift at the heart of k-object/k-call-site sensitivity:
+- **Mainstream (the ~30 CS families):** only `Context` / `HContext`, all **flat,
+  arity 1–4**, every field **symbol-rooted** (`MethodInvocation`, `Value`,
+  `Type`, `symbol`, `ContextComponent`). **No nesting, no recursion.** Field
+  *types* may differ (`[type:Type, value:Value]`), but every field erases to
+  `Spur` under `--str-intern`.
+- **Recursive records:** exactly **6 types, only in 2 niche families** —
+  `sound-may-point-to` (`MayContext`, `AccessPathSuffix`, `AccessPath`) and
+  `xtractor` (`Cond`, `GroupCond`, `Expr`). Cons-lists (unbounded) plus one tree
+  (`Expr`). **Out of scope; handled later by the string lowering.**
 
-```souffle
-Special_TwoCallSiteCtx(?callerCtx, ?invo, ?calleeCtx) :-
-  SomeRel(?callerCtx, ?invo),
-  ?callerCtx = [?invocation1, ?invocation2],   //  <- DESTRUCTURE bound callerCtx
-  ?calleeCtx = [?invocation2, ?invo].          //  <- CONSTRUCT shifted context
+Site counts: ~60 record `.type` declaration sites (the same few names redeclared
+per analysis), ~289 record literals, arities 1–4 (2 most common).
 
-isContext([?value, ?any]).                     //  <- match in a body atom arg
-```
+## Representation: fixed tuple `(T0, …, Tk)`
 
-There is **no field subscripting** (`ctx.0`, `ctx$1`) anywhere — records are
-only ever built whole and matched whole. Components are always symbol-rooted
-(`Type`, `Value`, `MethodInvocation`, and — after the mirror's union/bare-type
-lowering — every `ContextComponent`/`UniqueContext` is `symbol`).
+A flat record lowers to a **fixed-arity Rust tuple of the fields' erased types**.
+For DOOP that is `(Spur, …, Spur)` (every field is symbol-rooted), but a `number`
+field would be `i64` — the tuple handles heterogeneous fields correctly, whereas
+a homogeneous `[Spur; k]` array would not. The tuple is **inline** (`Copy`,
+contiguous, no heap, no interner entry, no side table) and FlowLog already lowers
+every relation row to a Rust tuple of typed columns, so a record column is just a
+nested tuple — reusing existing `tuple_type` / `tuple_tokens` codegen.
 
-### Site counts (across `analyses/*/analysis.dl`)
+Lowering:
 
-| Construct | Count |
-| --- | --- |
-| Record `.type` declarations | 60 (28 analyses declare a record `Context`/`HContext`) |
-| Record literals (`[ ... ]` as value/pattern) | ~289 |
-| Distinct arities | 1, 2, 3, 4 (arity ≤ 4; arity 2 most common) |
+| construct | source | lowering |
+| --- | --- | --- |
+| type decl | `.type T = [f0:T0,…,fk:Tk]` | internal `RecordType{ fields, recursive }`; Rust type = `(T0',…,Tk')` (erased per-field) |
+| construct | `x = [a, b]` | `let x = (a, b);` |
+| destructure | `x = [a, b]` (`x` bound) | `let (a, b) = x;` — bind free components; for an already-bound component emit an equality filter |
+| equality / join | `x = y`, join on `x` | derived `Ord`/`Hash`/`Eq`/`Clone`/`Copy` on the tuple — DD joins on it natively (same as FlowLog's existing multi-column tuple keys) |
+| `ord(record)` | `ord(x)` | a content hash of the tuple (deterministic, worker-independent); used only for bucketing — won't equal Soufflé's id, which is fine (those 2 families are heuristic/non-exact regardless) |
+| output | print column | `[c0, …, ck]` with each `Spur` resolved to its string |
 
-## Current FlowLog grammar (`crates/flowlog-build/src/parser/grammar.pest`)
+Construct/destructure **direction** (which side is bound) is decided by
+range-restriction, exactly as `parser/desugar.rs` already does for `x = <expr>`
+assignment-binding — extend that pass to recognize record literals.
 
-```pest
-type_ref = { data_type | alias_name }          // no record production
-type_alias_decl = { ".type" ~ identifier ~ type_decl_op ~ type_ref }
-```
+### Why fixed-tuple (not string-encoding, not Soufflé's id)
 
-A `.type X = [ ... ]` fails at the `[` (`expected type_ref`); a record literal in
-a rule fails at the `[` too. There is no record type, no record value, no
-construction, no destructuring.
+- **No per-op interning.** The string-encoding *and* Soufflé's record table both
+  pay a hash-table op on every construct **and** destructure; DOOP components are
+  long method signatures, so that is hashing 50–800 chars per context op. The
+  inline tuple just copies already-interned `Spur`s. This is the dominant win.
+- **No heap** (unlike `Vec<Spur>`), **no side table** (unlike Soufflé), **small
+  inline key** (k ≤ 4).
+- Soufflé uses an interned 1-word id because its uniform-word value model
+  *forces* it — not because it is fastest. FlowLog's richer value model lets it
+  inline the tuple, which Soufflé cannot express.
 
-## Required semantics
+## Required work (itemized)
 
-A record type `T = [f0:T0, …, fk:Tk]` is a value type whose values are in
-bijection with k+1-tuples of component values. The only operations DOOP needs:
+1. **Grammar** (`crates/flowlog-build/src/parser/grammar.pest`):
+   - record type: `record_type = { "[" ~ record_field ~ ("," ~ record_field)* ~ "]" }`,
+     `record_field = { identifier ~ ":" ~ type_ref }`; allow `record_type` in the
+     `.type` RHS (`type_ref = { data_type | record_type | alias_name }`).
+   - record literal (value/pattern): `record_literal = { "[" ~ arithmetic_expr ~ ("," ~ arithmetic_expr)* ~ "]" }`,
+     usable as a `factor` and as an atom argument.
+   - *Recursion parses for free:* a field type `rest:MayContext` is just
+     `alias_name` — no extra grammar work.
+2. **Type system:** first-class `RecordType { fields: Vec<Type>, recursive: bool }`;
+   track arity; type-check construct/destructure against per-field types; set
+   `recursive` when the type (transitively) references itself — this is the seam's
+   dispatch key.
+3. **IR / desugar:** abstract `Pack` / `Unpack`; recognize record literals in
+   equalities and head args; extend the assignment-binding desugar for direction.
+4. **Codegen — `RecordRepr` seam:** an enum/trait with a **`FixedTuple{ fields }`
+   variant implemented now**, and a reserved **`StringEncoded` variant
+   (unimplemented)** for `recursive: true`. Dispatch on `RecordType.recursive`.
+   For `FixedTuple`: construct → tuple literal, destructure → tuple pattern,
+   column Rust type → `(T0,…,Tk)`.
+5. **`ord`:** content hash for the `FixedTuple` repr.
+6. **Output formatting:** record column → `[a, b]` with resolved strings.
 
-* **equality** — two records are equal iff componentwise equal;
-* **construction** — `[a0,…,ak]` produces the record value for those components
-  (the components are bound; the record becomes bound);
-* **destructuring** — matching a *bound* record against `[x0,…,xk]` binds each
-  free `xi` to the corresponding component and filters on each already-bound one.
+## Forward-compat (do NOT build now, just don't foreclose)
 
-Records flow as ordinary single-column values through every downstream relation
-(`VarPointsTo`'s `?ctx` column, `CallGraphEdge`, …), so a record **must have a
-single-column representation** — flattening a context into multiple columns
-would change the arity of dozens of relations and is not viable.
+- Front-end (grammar/type-system/IR) accepts recursive record decls and literals.
+- The `RecordRepr` seam reserves `StringEncoded` for `recursive: true` types,
+  added later for `sound-may-point-to` / `xtractor` (construct = `concat`,
+  destructure = `split`, absorbs unbounded depth + trees as one interned `Spur`).
+- So the recursive families later need only a **second codegen lowering**, not a
+  redesign — the front-end never changes.
 
-## Fix — two strategies
+## Test cases (must pass)
 
-### Strategy A (recommended): content-addressed string id + codegen split
-
-Represent a record value as the reserved-delimiter concatenation of its
-components, with a separator byte DOOP symbols never contain (e.g. `\x01`):
-
-```
-[a, b]   ⟶   a ⟨0x01⟩ b           // a single `symbol`/`Spur` value
-```
-
-* **type**: lower `T = [f0:T0,…]` to `T = symbol` internally; remember the field
-  arity k+1 for `T`.
-* **construction** (`x = [a,b]`, or `[a,b]` in a head arg): emit
-  `x = concat(a, SEP, b)`. The engine already concatenates strings in codegen and
-  already has the equality-as-assignment desugar pass (`parser/desugar.rs`) that
-  substitutes such a computed value into the head/comparisons — construction
-  needs no new machinery beyond recognising the record literal.
-* **destructuring** (`x = [a,b]` with `x` bound, or `[a,b]` in a body atom): emit
-  a fixed-arity split of `x` on `SEP` into exactly k+1 pieces, binding each free
-  component and equality-filtering each bound one. This is the one new runtime
-  primitive — `split_fixed(s, SEP, k+1) -> [field; k+1]` — and it is exactly why
-  records belong in the **engine**, not the doop-flowlog mirror: the mirror has
-  no `index-of`/split builtin and cannot invert a concatenation, but the engine
-  owns codegen and the runtime and can emit the split directly.
-
-Pros: a record stays one column and flows transparently; no global record table;
-fully deterministic and **engine-independent** (unlike `ord`, the encoding does
-not depend on interning order, so it sidesteps the representative-renaming
-non-portability entirely). Components must be string-rooted — true for DOOP;
-a numeric component would round-trip through `to_string`/`to_number`.
-
-### Strategy B: Soufflé-style record table
-
-Maintain a per-type collection `_RecordTable_T(id, f0,…,fk)` keyed by an interned
-id; construction is insert-or-lookup, destructuring is a join. Faithful to
-Soufflé and supports arbitrary component types, but heavier: a maintained
-collection plus a join on every record use, and id allocation must be
-content-addressed (not a counter) to stay deterministic across workers/runs.
-
-For DOOP's fixed-arity, symbol-rooted, opaque-key usage, **Strategy A is simpler,
-deterministic, and avoids any interning-order dependence**, so it is recommended.
-
-## Test case (smallest reproducer)
+**1. Round-trip unit test (smallest reproducer):**
 
 ```souffle
 .type Pair = [ a:symbol, b:symbol ]
 .decl In(x:symbol, y:symbol)
 .decl Out(p:Pair)
 .decl Back(a:symbol, b:symbol)
-In("p", "q").
-Out(?p) :- In(?x, ?y), ?p = [?x, ?y].        // construct
-Back(?a, ?b) :- Out(?p), ?p = [?a, ?b].      // destructure
+In("p","q").
+Out(p)    :- In(x,y), p = [x,y].     // construct
+Back(a,b) :- Out(p), p = [a,b].      // destructure
 .output Back
+// expect Back = { ("p","q") }
 ```
 
-Expected post-evaluation: `Back = { ("p", "q") }`. (Round-trips a record through
-construction and destructuring; passes iff both directions work.)
+**2. End-to-end 1-call-site (the real target):**
 
-## Adjacent, smaller engine gaps (for the same context-sensitive push)
+```bash
+DEF=-DCONFIGURATION=OneCallSiteSensitiveConfiguration
+cpp -P $DEF flowlog-logic/facts/facts.dl                              > 01.dl
+cpp -P $DEF flowlog-logic/basic/basic.dl                              > 02.dl
+cpp -P $DEF flowlog-logic/analyses/1-call-site-sensitive/analysis.dl  > 03.dl
+cat 0{1,2,3}.dl > assembled.dl
+$FLOWLOG_BIN --str-intern -F <batik-facts> -D <out> -o <bin> assembled.dl
+<bin> -w 1
+# then diff vs Soufflé:
+bin/compare-flowlog-souffle.py <out> <souffle-out>   # expect exact (representative relations under --partition / -w 1)
+```
 
-These surface *after* records in the deeper analyses; recording them here so the
-next engine pass can batch them:
+## Non-goals (explicitly out of scope now)
 
-* **Double-underscore relation names.** `identifier = @{ "_"? ~ ASCII_ALPHA+ … }`
-  allows at most one leading `_`, so DOOP's `__OperatorAt` (data-flow, xtractor)
-  fails with `expected relation_name`. One-character grammar fix: `"_"?` → `"_"*`.
-* **`nil` record literal, `as(x,T)` casts, sum-type ADTs (`= A {} | B {x}`).**
-  Needed only by `xtractor`, `sound-may-point-to`, `dependency-context`. Out of
-  scope for the PTA family; spec separately when those analyses are scheduled.
+- String-encoding / recursive lowering (`sound-may-point-to`, `xtractor`).
+- Trees, `nil`, sum-type ADTs, `.functor`, double-underscore relation names.
+- A general indexable array/collection type — records are **only**
+  pack-whole / unpack-whole / equality.
 
-## What the mirror already handles, so the engine never sees it
+## What the mirror already handles (so the engine never sees it)
 
-`bin/flowlog-mirror.py` lowers the type-declaration forms FlowLog's grammar does
-not accept but DOOP's string world makes trivial (so the engine only has to
-implement records, above, not these):
-
-* `.number_type X` / `.symbol_type X` → `.type X = number` / `= symbol`
-* bare `.type X` (uninterpreted primitive) → `.type X = symbol`
-* union `.type X = A | B | …` (symbol-rooted members) → `.type X = symbol`
-* `inline` annotation on `.decl` (perf hint) → stripped
-* `.plan`, `overridable`, `?`-variable prefixes, body-aggregates, boolean
-  builtins, arithmetic in atom args → see the mirror's transform table.
+`bin/flowlog-mirror.py` lowers the forms FlowLog's grammar does not accept but
+DOOP's string world makes trivial: `.number_type`/`.symbol_type` → `= number`/
+`= symbol`; bare `.type X` → `= symbol`; union `.type X = A | B` (symbol-rooted)
+→ `= symbol`; `inline` stripped; `.plan`, `overridable`, `?`-prefixes,
+body-aggregates, boolean builtins, arithmetic-in-atom-args per its transform
+table. The engine only has to implement **records**, above.
