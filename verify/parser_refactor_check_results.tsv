@@ -1,0 +1,38 @@
+family	verdict	detail
+1-call-site-sensitive+heap	CHECK_OK	
+1-call-site-sensitive	CHECK_OK	
+1-object-1-type-sensitive+heap	CHECK_OK	
+1-object-sensitive+heap	CHECK_OK	
+1-object-sensitive	CHECK_OK	
+1-type-sensitive+heap	CHECK_OK	
+1-type-sensitive	CHECK_OK	
+2-call-site-sensitive+2-heap	CHECK_OK	
+2-call-site-sensitive+heap	CHECK_OK	
+2-object-sensitive+2-heap	CHECK_OK	
+2-object-sensitive+heap	CHECK_OK	
+2-type-object-sensitive+2-heap	CHECK_OK	
+2-type-object-sensitive+heap	CHECK_OK	
+2-type-sensitive+heap	CHECK_OK	
+3-object-sensitive+2-heap	CHECK_OK	
+3-object-sensitive+3-heap	CHECK_OK	
+3-type-sensitive+2-heap	CHECK_OK	
+3-type-sensitive+3-heap	CHECK_OK	
+4-object-sensitive+4-heap	CHECK_OK	
+adaptive-2-object-sensitive+heap	CHECK_OK	
+basic-only	SKIP	no-cfg
+blacklist-1-object-sensitive+heap	FAIL(1)	error: rule references undeclared relation `basic·blacklistedheapallo
+context-insensitive-plus	FAIL(1)	error: syntax error: expected type_decl_op
+context-insensitive-plusplus	FAIL(1)	error: syntax error: expected type_decl_op
+context-insensitive	CHECK_OK	
+data-flow	SKIP	no-cfg
+dependency-analysis	SKIP	no-cfg
+fully-guided-context-sensitive	FAIL(1)	error: syntax error: expected EOI, relation_ref, declaration, input_di
+micro	SKIP	no-cfg
+oracular-precision	FAIL(1)	error: relation `mainAnalysis.configuration.StickyMethod` has both `.o
+oracular-scalability	FAIL(1)	error: syntax error: expected EOI, relation_ref, declaration, input_di
+partitioned-2-object-sensitive+heap	CHECK_OK	
+selective-2-object-sensitive+heap	CHECK_OK	
+sound-may-point-to	SKIP	no-cfg
+sticky-2-object-sensitive	CHECK_OK	
+types-only	CHECK_OK	
+xtractor	SKIP	no-cfg
