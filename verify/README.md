@@ -15,6 +15,29 @@ rebuild and re-run without the original `/dev/shm` scratch state.
 - The 5 untested families failed on the **Soufflé side** (single-core OOM/timeout/error),
   not FlowLog.
 
+## Coverage & handover (→ run on a more powerful machine)
+
+FlowLog **supports running 24 families** (the `verify.sh` default set — the full
+context-sensitivity hierarchy; **25** if you add `types-only`, which needs
+`-DDISABLE_POINTS_TO`). Status on luindex, on the original **251 GiB / 128-core**
+box:
+
+- **19 byte-exact-verified** against Soufflé (see `timing_summary.tsv`).
+- **5 not completed here — re-run on a bigger machine to close them out:**
+
+  | family | blocker on this machine (not a FlowLog bug) |
+  |---|---|
+  | `2-call-site-sensitive+heap`  | ~217 GiB peak RSS — OOM at the memory edge (both engines) |
+  | `2-call-site-sensitive+2-heap`| ~217 GiB peak RSS — OOM |
+  | `sticky-2-object-sensitive`   | Soufflé `-j1` run exceeded the 60-min cap |
+  | `selective-2-object-sensitive+heap` | Soufflé `-j1` run exceeded the 60-min cap |
+  | `partitioned-2-object-sensitive+heap` | FlowLog ran clean (8,730,757); **Soufflé errored** — needs a look |
+
+  All 24 (+`types-only`) **compile/`cargo check` clean** — these 5 are
+  resource/Soufflé-side limits, not FlowLog. On a box with more RAM (for the
+  `2-call-site` pair) and headroom, just re-run `verify/verify.sh` — bump
+  `SF_RUN_TO` for the slow Soufflé cases — to verify the remaining 5.
+
 ## Components & pinned versions
 
 | component | location | version |
