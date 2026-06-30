@@ -24,12 +24,27 @@ rebuild and re-run without the original `/dev/shm` scratch state.
 | DOOP→Soufflé logic | `souffle-logic/` (this repo) | tracked (upstream) |
 | Facts (EDB) | regenerate via DOOP | benchmark used: **luindex** |
 
-> ⚠️ **Grammar pin.** This logic uses the older predicate syntax
-> `match(...) = True` / `= False` (and `contains(...) = True`). FlowLog
-> `main-next` (e.g. `3bdb94b`) changed `match`/`contains` into **direct boolean
-> predicates** (`match(...)` / `!match(...)`), with UDF booleans requiring
-> `== true`. So either build the compiler at **`32cbc00`** to match this logic,
-> or port the logic to the new grammar first (see "Grammar migration" below).
+> ⚠️ **Why this exact compiler commit matters.** Two independent reasons pin
+> the build to `nemo/tuple` (`32cbc00`):
+>
+> 1. **Tuple-EDB engine fix (the critical one).** Every context-*sensitive*
+>    family represents contexts as tuples, so DOOP declares tuple-typed
+>    relations that become empty declared-underived EDB inputs. `nemo/tuple`
+>    handles these; `main-next` and `nemo/parser-refactor` still have
+>    `relation.rs: unreachable!("tuple-typed columns cannot appear in EDB input
+>    relations")` and **panic on 18 of the 19 families** (only
+>    `context-insensitive` compiles without the fix). This fix has NOT been
+>    merged into main-next (`#194 "tuple syntax"` is a *different* feature —
+>    syntax, not EDB-input handling).
+> 2. **Grammar.** This logic uses `match(...) = True` / `= False` /
+>    `contains(...) = True`. `nemo/tuple` and `main-next` accept that form
+>    (see main-next's own `tests/fixtures/.../match_builtin`). Only
+>    `nemo/parser-refactor` changed `match`/`contains` into bare extern-fn bool
+>    predicates (`match(...)` / `!match(...)`).
+>
+> So: **build at `32cbc00` (`nemo/tuple`) and use the logic as-is.** To target
+> the newer parser instead, you must FIRST merge `nemo/tuple`'s `relation.rs`
+> fix into that branch AND migrate the logic grammar (see "Grammar migration").
 
 ## 1. Build the FlowLog compiler
 
@@ -99,18 +114,24 @@ then `diff <(canon fl/VarPointsTo.csv) <(canon sf/VarPointsTo.csv)`.
 > Note: these scripts hard-code `/dev/shm` paths and the `fl-tuple` worktree.
 > Update `ROOT`/`FLC`/`FACTS`/`W` at the top of each before reuse.
 
-## Grammar migration (flowlog-logic → main-next)
+## Grammar migration (flowlog-logic → nemo/parser-refactor)
 
-To run against a `main-next` compiler, update predicate syntax in `flowlog-logic/`:
+`nemo/parser-refactor` makes `match`/`contains` bare extern-fn bool predicates.
+To run there you need BOTH:
 
-- `match(re, x) = True.`  → `match(re, x).`
-- `match(re, x) = False,` → `!match(re, x),`
-- same for `contains(...)`
-- user-defined boolean functions: call as `udf(...) == true`
+1. **Merge `nemo/tuple`'s `relation.rs` tuple-EDB fix into that branch** — else
+   it panics on every context-sensitive family (verified: only
+   `context-insensitive` compiles without it).
+2. **Migrate predicate syntax** in `flowlog-logic/` — the 5 sites below:
+   - `match(re, x) = True.`  → `match(re, x).`
+   - `match(re, x) = False,` → `!match(re, x),`  (negation is `!`)
+   - same for `contains(...)`
 
-Current occurrences (small): `match(` ×5, `contains( ... = True` ×1 — in
-`basic/method-resolution.dl`, `basic/type-hierarchy.dl`, `main/init.dl`,
-`main/special-library.dl`, `analyses/sticky-2-object-sensitive/analysis.dl`.
+The 5 occurrences: `basic/method-resolution.dl:61,62` (both `= False`),
+`basic/type-hierarchy.dl:257`, `main/init.dl:28`, and
+`analyses/sticky-2-object-sensitive/analysis.dl:29`. (Verified that the bare
+form parses cleanly on `nemo/parser-refactor` — the only remaining blocker there
+is the tuple-EDB fix in step 1.)
 
 ## File-to-file divergence vs souffle-logic
 
