@@ -26,7 +26,7 @@
   DataStructureClass(innerClass) :-
     DataStructureClass(class),
     isClassType(innerClass),
-    match(cat(class, "$.*"), innerClass) = True.
+    match(cat(class, "$.*"), innerClass).
   .output DataStructureClass
 
   .decl DataStructureMethod(method:Method)

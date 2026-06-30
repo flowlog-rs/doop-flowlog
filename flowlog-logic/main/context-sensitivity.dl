@@ -583,9 +583,13 @@ BOUND_VAR_POINTS_TO(hctx, value, toCtx, to) :-
 // No longer using general-purpose inter-procedural assignments for lots
 // of different flows. Souffle cannot optimize well. Best to break up
 // key cases (like arg-return flow, above) into separate, well-optimized rules.
-BOUND_VAR_POINTS_TO(hctx, value, toCtx, to) :-
-  OptInterproceduralAssign(toCtx, to, fromCtx, from),
-  VarPointsTo(hctx, value, fromCtx, from).
+// OptInterproceduralAssign is never produced in any configuration (the
+// general-purpose interproc assign was split into the well-optimized rules
+// above), so this rule is a no-op. Commented out so the empty, tuple-typed
+// relation is pruned rather than emitted as a tuple-typed EDB input.
+// BOUND_VAR_POINTS_TO(hctx, value, toCtx, to) :-
+//   OptInterproceduralAssign(toCtx, to, fromCtx, from),
+//   VarPointsTo(hctx, value, fromCtx, from).
 //  .plan 1:(2,1)
 //// no plan for now. These kinds of inter-proc assignments should be very few!
 
