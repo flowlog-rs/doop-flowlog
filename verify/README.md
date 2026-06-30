@@ -135,24 +135,35 @@ repo root, tolerates per-family timeout/OOM/error, and frees scratch after each.
 These were produced with FlowLog `nemo/tuple` (`32cbc00`) + `= True` grammar and
 are the byte-exact-verified record referenced above.
 
-## Grammar migration (flowlog-logic → nemo/parser-refactor)
+## Running on the newer parser (branch `flowlog-next-datalog-compat`)
 
-`nemo/parser-refactor` makes `match`/`contains` bare extern-fn bool predicates.
-To run there you need BOTH:
+To run on a **clean, unmodified** `main-next` / `nemo/parser-refactor` compiler —
+**no engine change, no carrying a `relation.rs` fork** — use the
+`flowlog-next-datalog-compat` branch of this repo. It applies two **datalog-only**
+edits:
 
-1. **Merge `nemo/tuple`'s `relation.rs` tuple-EDB fix into that branch** — else
-   it panics on every context-sensitive family (verified: only
-   `context-insensitive` compiles without it).
-2. **Migrate predicate syntax** in `flowlog-logic/` — the 5 sites below:
-   - `match(re, x) = True.`  → `match(re, x).`
-   - `match(re, x) = False,` → `!match(re, x),`  (negation is `!`)
-   - same for `contains(...)`
+1. **Strip the dead `OptInterproceduralAssign` rule** (`main/context-sensitivity.dl`).
+   That relation is never produced in any configuration, so the rule is a no-op;
+   as an unproduced tuple-typed relation it was the *only* thing emitted as a
+   tuple-typed EDB input (the thing clean compilers panic on). Removing the dead
+   reference lets it be pruned — no effect on results.
+2. **Bare `match`/`contains` grammar** (parser-refactor makes them extern-fn bool
+   predicates): `match(re,x) = True.` → `match(re,x).`,
+   `match(re,x) = False,` → `!match(re,x),` (negation `!`); same for `contains`.
+   The 5 sites: `basic/method-resolution.dl:61,62`, `basic/type-hierarchy.dl:257`,
+   `main/init.dl:28`, `analyses/sticky-2-object-sensitive/analysis.dl:29`.
 
-The 5 occurrences: `basic/method-resolution.dl:61,62` (both `= False`),
-`basic/type-hierarchy.dl:257`, `main/init.dl:28`, and
-`analyses/sticky-2-object-sensitive/analysis.dl:29`. (Verified that the bare
-form parses cleanly on `nemo/parser-refactor` — the only remaining blocker there
-is the tuple-EDB fix in step 1.)
+**Validated:** all 23 previously-run families pass `flowlog-compiler --check`
+(`cargo check`; pass `-D -` for the output dir) on a clean `parser-refactor`
+build — see `verify/parser_refactor_check_results.tsv` on that branch. Byte-exact
+correctness is verified on `master` (`= True` / `nemo/tuple`); a full byte-exact
+*run* on parser-refactor with this branch is still TODO.
+
+> `master` (this branch) stays on `= True` + `nemo/tuple` — the byte-exact-verified
+> setup. The two trees target **different compilers**; don't mix grammars.
+> (The alternative — merging `nemo/tuple`'s `relation.rs` tuple-EDB fix into the
+> newer parser — also works but means maintaining an engine fork, so the
+> datalog-only branch above is preferred.)
 
 ## File-to-file divergence vs souffle-logic
 
