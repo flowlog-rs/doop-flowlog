@@ -103,16 +103,37 @@ Byte-exact compare (canonicalise record/tuple brackets, sort):
 `canon(){ sed -e 's/\[/(/g;s/\]/)/g;s/, /,/g;s/,)/)/g' "$1" | LC_ALL=C sort; }`
 then `diff <(canon fl/VarPointsTo.csv) <(canon sf/VarPointsTo.csv)`.
 
-## Harness scripts (in this dir)
+## The harness: `verify.sh`
 
-- `run_verify.sh` — full overnight batch: build+run+diff each family, FlowLog vs Soufflé.
-- `rerun.sh` — same, narrowed to families that hit the build timeout (longer cap).
-- `bench_w32.sh` — rebuild + time FlowLog at `-w 16` / `-w 32` (parallel scaling).
-- `results.tsv`, `results2.tsv` — raw verdict tables.
-- `timing_summary.tsv` — distilled trusted timings (`/usr/bin/time` wall-clock + max RSS).
+One portable, env-driven script runs every supported family on **both** engines and
+byte-exact-diffs `VarPointsTo`. No hard-coded paths; works on any DaCapo benchmark.
 
-> Note: these scripts hard-code `/dev/shm` paths and the `fl-tuple` worktree.
-> Update `ROOT`/`FLC`/`FACTS`/`W` at the top of each before reuse.
+```bash
+# minimal: point it at the compiler and a benchmark's facts
+FLC=/path/to/flowlog-compiler FACTS=/path/to/luindex/facts verify/verify.sh
+
+# pick the benchmark via FACTS_ROOT + BENCHMARK, label the output, choose threads
+FLC=… FACTS_ROOT=/data/dacapo-facts BENCHMARK=antlr DATASET=antlr \
+  WORKERS=1 JOBS=1 verify/verify.sh
+
+# just a few families
+FLC=… FACTS=… verify/verify.sh 2-object-sensitive+heap 3-type-sensitive+2-heap
+```
+
+Writes `verify_<DATASET>.tsv` to `$OUTDIR` (default `.`) with per-family
+build/run exit codes, `/usr/bin/time` wall-clock seconds, VarPointsTo counts,
+and the `MATCH`/`DIFF`/`INCOMPLETE` verdict; prints a summary at the end.
+Env knobs: `SOUFFLE`, `WORKERS`/`JOBS`, `BUILD_TO`/`FL_RUN_TO`/`SF_RUN_TO`,
+`OUTDIR`/`WORKDIR`, `SOUFFLE_KEEP_PLAN` (see the header comment). Self-detects the
+repo root, tolerates per-family timeout/OOM/error, and frees scratch after each.
+
+### Historical data (kept, do not regenerate)
+
+- `results.tsv`, `results2.tsv` — the original luindex batch + rerun verdicts.
+- `timing_summary.tsv` — the trusted `/usr/bin/time` timings + max RSS (luindex).
+
+These were produced with FlowLog `nemo/tuple` (`32cbc00`) + `= True` grammar and
+are the byte-exact-verified record referenced above.
 
 ## Grammar migration (flowlog-logic → nemo/parser-refactor)
 
