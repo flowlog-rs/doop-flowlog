@@ -3,11 +3,13 @@
 # /datasets/facts/CURRENT symlink. After this, any dataset is run by repointing
 # CURRENT and executing flbinX/<fam> -w N (no per-dataset recompile).
 set -u
-BASE=/home/azureuser/doop-e2e
-FLC=/home/azureuser/flowlog-mn/target/release/flowlog-compiler
-CUR=/datasets/facts/CURRENT
-OUTROOT=/datasets/doop-e2e
-export TMPDIR=/datasets/tmp
+# ---- config (override via env) ----
+BASE=${BASE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}
+FLC=${FLC:-/home/azureuser/flowlog-mn/target/release/flowlog-compiler}  # FlowLog compiler (main-next + #208)
+FACTS_ROOT=${FACTS_ROOT:-/datasets/facts}
+CUR=${CUR:-$FACTS_ROOT/CURRENT}
+OUTROOT=${OUTROOT:-/datasets/doop-e2e}
+export TMPDIR=${TMPDIR:-/datasets/tmp}
 mkdir -p "$BASE/flbinX" "$OUTROOT/floutX" "$BASE/logs"
 mapfile -t FAMILIES < "$BASE/families.txt"
 for fam in "${FAMILIES[@]}"; do

@@ -4,8 +4,12 @@
 # Mirrors the verified pipeline in doop-flowlog@flowlog-next-datalog-compat/verify/run_verify.sh.
 # Output restricted to VarPointsTo. No DOOP/Java/gradle needed.
 set -u
-ROOT=/home/azureuser/doop-e2e/doop-logic
-OUT=/home/azureuser/doop-e2e/programs
+# ---- config (override via env) ----
+# LOGIC: dir containing flowlog-logic/ + souffle-logic/ (the DOOP Datalog source).
+# Defaults to the repo root when this script lives in verify/standalone/mainnext-w32/.
+# For a standalone checkout elsewhere, set e.g. LOGIC=/path/to/doop-flowlog.
+ROOT=${LOGIC:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}
+OUT=${OUT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/programs}
 mkdir -p "$OUT/flowlog" "$OUT/souffle"
 
 FAMILIES=(

@@ -9,11 +9,12 @@
 # All large artifacts live on /datasets (root fs is tiny); binaries kept for reuse.
 # =====================================================================================
 set -u
-BASE=/home/azureuser/doop-e2e
-FLC=/home/azureuser/flowlog-mn/target/release/flowlog-compiler
+# ---- config (override via env) ----
+BASE=${BASE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}
+FLC=${FLC:-/home/azureuser/flowlog-mn/target/release/flowlog-compiler}  # FlowLog compiler (main-next + #208)
 FACTS=${FACTS:-/datasets/facts/luindex}
-OUTROOT=/datasets/doop-e2e
-export TMPDIR=/datasets/tmp LC_ALL=C
+OUTROOT=${OUTROOT:-/datasets/doop-e2e}
+export TMPDIR=${TMPDIR:-/datasets/tmp} LC_ALL=C
 WORKERS=${WORKERS:-32}          # FlowLog -w  (and Soufflé -j)
 JOBS=${JOBS:-32}                # Soufflé -j at compile & run
 REPEAT=${REPEAT:-2}             # timed repeats; min wall reported

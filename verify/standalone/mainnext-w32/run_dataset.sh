@@ -5,12 +5,14 @@
 # Captures wall + peak RSS (min of REPEAT), byte-exact correctness. No compilation.
 # Usage: ./run_dataset.sh <dataset-name>     (e.g. ./run_dataset.sh eclipse)
 set -u
-DS=${1:?usage: run_dataset.sh <dataset>}
-BASE=/home/azureuser/doop-e2e
-FACTS=/datasets/facts/$DS
-CUR=/datasets/facts/CURRENT
-OUTROOT=/datasets/doop-e2e
-export TMPDIR=/datasets/tmp LC_ALL=C
+DS=${1:?usage: [env overrides] run_dataset.sh <dataset> [family ...]}
+# ---- config (override via env) ----
+BASE=${BASE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}   # harness dir: flbinX/, sfbin/, families.txt
+FACTS_ROOT=${FACTS_ROOT:-/datasets/facts}                    # dir holding <dataset>/ DOOP fact dirs
+OUTROOT=${OUTROOT:-/datasets/doop-e2e}                       # scratch for large outputs (keep off small root fs)
+CUR=${CUR:-$FACTS_ROOT/CURRENT}                              # symlink the FlowLog binaries' fact dir is baked to
+export TMPDIR=${TMPDIR:-/datasets/tmp} LC_ALL=C
+FACTS=$FACTS_ROOT/$DS
 WORKERS=${WORKERS:-32}; JOBS=${JOBS:-32}; REPEAT=${REPEAT:-2}; RUN_TO=${RUN_TO:-7200}
 [ -d "$FACTS" ] || { echo "no dataset $FACTS"; exit 1; }
 mkdir -p "$OUTROOT/sfoutX" "$OUTROOT/tmp" "$BASE/results"
