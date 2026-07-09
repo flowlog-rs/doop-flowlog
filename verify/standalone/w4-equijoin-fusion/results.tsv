@@ -1,0 +1,17 @@
+dataset	family	before_s	after_s	souffle_s	before_vpt	after_vpt	souffle_vpt	before_md5	after_md5	souffle_md5	before==after	after==souffle	speedup
+luindex	1-object-1-type-sensitive+heap	621.15	37.45	108.8	8719851	8719851	8719851	ca39f8f1	ca39f8f1	070d81f9	YES	NO	16.59x
+luindex	2-type-object-sensitive+heap	630.94	37.57	109.78	8719851	8719851	8719851	94e18efa	94e18efa	8d491f04	YES	NO	16.79x
+luindex	2-type-object-sensitive+2-heap	696.43	76.53	135.77	9788238	9788238	9788238	9b59a760	9b59a760	f3a2ce64	YES	NO	9.10x
+tomcat	1-object-1-type-sensitive+heap	334.73	27.85	63.36	4808401	4808401	4808401	b75d8120	b75d8120	5ebabdfd	YES	NO	12.02x
+tomcat	2-type-object-sensitive+heap	337.14	27.44	60.84	4808401	4808401	4808401	0517c6ca	0517c6ca	585fd842	YES	NO	12.29x
+tomcat	2-type-object-sensitive+2-heap	401.95	54.46	84.09	6546303	6546303	6546303	985b9cf3	985b9cf3	eb0c332c	YES	NO	7.38x
+eclipse	1-object-1-type-sensitive+heap	2303.26	103.57	479.18	35244021	35244021	35244021	294c4d55	294c4d55	ab360c77	YES	NO	22.24x
+cassandra	1-object-1-type-sensitive+heap	298.25	30.33	58.22	4213679	4213679	4213782	468dcef5	468dcef5	6ed57360	YES	NO	9.83x
+cassandra	2-type-object-sensitive+heap	301.24	30.38	59.26	4213679	4213679	4213782	bdbd774e	bdbd774e	d297eafa	YES	NO	9.92x
+cassandra	2-type-object-sensitive+2-heap	369.66	63.05	85.37	6178573	6178573	6178676	05070d0b	05070d0b	c5cd0a20	YES	NO	5.86x
+lusearch	1-object-1-type-sensitive+heap	561.38	33.73	94.69	7144057	7144057	7144057	bc5cc493	bc5cc493	622965bb	YES	NO	16.64x
+lusearch	2-type-object-sensitive+heap	574.32	34.14	94.17	7144057	7144057	7144057	648eef64	648eef64	593c58e8	YES	NO	16.82x
+avrora	1-object-1-type-sensitive+heap	465.45	29.55	59.79	4385274	4385274	4385274	88506deb	88506deb	8e4c61cc	YES	NO	15.75x
+avrora	2-type-object-sensitive+heap	468.99	29.57	58.99	4385274	4385274	4385274	2775459c	2775459c	0bd611db	YES	NO	15.86x
+avrora	2-type-object-sensitive+2-heap	551.78	56.36	79.64	6014569	6014569	6014569	f48592b2	f48592b2	8e3edd82	YES	NO	9.79x
+pmd	1-object-1-type-sensitive+heap	983.76	40.43	107.38	8860236	8860236	8860236	8485137a	8485137a	6ee0c89e	YES	NO	24.33x
