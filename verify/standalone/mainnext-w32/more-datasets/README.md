@@ -20,13 +20,30 @@ FlowLog's edge scales with program size (geomean 1.34× on small cassandra → 2
 ## Correctness
 
 - **luindex, eclipse, tomcat, lusearch: 19/19 byte-exact** vs Soufflé (`only_FL = only_SF = 0`).
-- **cassandra: all 19 families differ by a small margin** (~0.05–0.3%). This is **not** contamination
-  and **not** parallel nondeterminism — it reproduces **deterministically at `-w1`** (verified on
-  `context-insensitive`: 2 545 822 rows both engines, 2341 tuples each way). It is the known
-  FlowLog↔Soufflé **representative-choice** difference (object/call-site families have **identical
-  counts**, symmetric set-diff) plus the **ord count-drift** on type-sensitive families — both benign
-  analysis-equivalence differences that cassandra's facts happen to trigger where the other four
-  DaCapo programs do not. Counts and diffs per family in `results_cassandra.tsv`.
+- **cassandra: all 19 families differ by a small margin** (~0.05–0.3%) — the only DaCapo program
+  here that isn't byte-exact. This is **not** contamination and **not** parallel nondeterminism: the
+  diffs reproduce **deterministically at `-w1`**, *identical* to the `-w32` diffs. Characterising three
+  families at `-w1` (run1 == run2) against the Soufflé oracle separates two distinct signatures:
+
+  | family | class | FL rows | Soufflé rows | only_FL | only_SF | signature |
+  |---|---|--:|--:|--:|--:|---|
+  | context-insensitive | — | 2 545 822 | 2 545 822 | 2341 | 2341 | exact count, **symmetric** |
+  | 1-object-sensitive | object | 7 571 545 | 7 571 545 | 12062 | 12062 | exact count, **symmetric** |
+  | 1-type-sensitive | type | 4 627 255 | 4 629 551 | 6324 | 8620 | **asymmetric count-drift** |
+
+  - **Object / call-site / context-insensitive families — exact counts, symmetric set-diff.** Both
+    engines derive the same *number* of tuples but pick different representatives for some equivalence
+    classes (e.g. a merged heap allocation). This is the benign "match-up-to-representative" case.
+  - **Type-sensitive families — asymmetric count-drift.** FlowLog computes a genuinely different tuple
+    *set* of a different size (here 2296 fewer). Because it is **deterministic at `-w1`** (same result
+    as `-w32`, run-to-run stable), it is **not** the ord/interning nondeterminism — it is a real
+    FlowLog↔Soufflé **precision divergence** on the type-sensitive analysis, triggered by some
+    construct present in cassandra's facts but not in the other four DaCapo programs.
+
+  The symmetric (representative) case is benign; the type-sensitive count-drift is a genuine
+  correctness gap that warrants **engine-side investigation** (tracked for a `flowlog` issue). Full
+  per-family diff counts in `results_cassandra.tsv`; the `-w1` characterisation in
+  `cassandra_w1_characterization.tsv`.
 
 ## Cross-dataset speedup (Soufflé wall / FlowLog wall — higher = FlowLog faster)
 
