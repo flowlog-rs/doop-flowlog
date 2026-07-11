@@ -1,0 +1,4 @@
+family	class	worker	FL_rows	SF_rows	only_FL	only_SF	FL_determinism	signature
+context-insensitive	context-insensitive	w1	2545822	2545822	2341	2341	DET(run1==run2)	exact-count-symmetric(representative)
+1-object-sensitive	object	w1	7571545	7571545	12062	12062	DET(run1==run2)	exact-count-symmetric(representative)
+1-type-sensitive	type	w1	4627255	4629551	6324	8620	DET(run1==run2)	asymmetric(same-min-ord-representative-cause-cascaded-via-type-context)

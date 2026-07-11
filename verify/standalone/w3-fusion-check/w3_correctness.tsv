@@ -1,0 +1,4 @@
+family	W3_w1_rows	SF_rows	only_W3	only_SF	verdict
+1-object-1-type-sensitive+heap	8719851	8719851	0	0	BYTE_EXACT
+2-type-object-sensitive+heap	8719851	8719851	0	0	BYTE_EXACT
+2-type-object-sensitive+2-heap	9788238	9788238	0	0	BYTE_EXACT

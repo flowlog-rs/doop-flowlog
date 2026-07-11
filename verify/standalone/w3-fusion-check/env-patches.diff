@@ -1,0 +1,185 @@
+diff --git a/flowlog-compiler/src/relation.rs b/flowlog-compiler/src/relation.rs
+index a11564f..86430bf 100644
+--- a/flowlog-compiler/src/relation.rs
++++ b/flowlog-compiler/src/relation.rs
+@@ -279,10 +279,21 @@ fn gen_one_rel_nonnullary(
+             }
+         }
+         DataType::Bool => quote! { if !shard_int(f0 as i64, peers, index) { return; } },
+-        // Records never appear in EDB input, so an input relation cannot have
+-        // a record first column to shard on.
++        // DOOP `= True` programs declare IDB relations with tuple-typed first
++        // columns (e.g. `mainAnalysis.OptInterproceduralAssign`). These never
++        // have a `.facts` file, so this shard is dead code for them, but it
++        // must still compile. Hash the whole tuple for a valid deterministic
++        // partition should such a relation ever be read as input. (Env patch,
++        // applied identically to base + w3 so the fusion is the only delta.)
+         DataType::FixedTuple(_) => {
+-            unreachable!("tuple-typed columns cannot appear in EDB input relations")
++            quote! {
++                {
++                    use ::std::hash::{Hash, Hasher};
++                    let mut __h = ::std::collections::hash_map::DefaultHasher::new();
++                    f0.hash(&mut __h);
++                    if !shard_int(__h.finish() as i64, peers, index) { return; }
++                }
++            }
+         }
+     };
+     let tuple_parse_stmts = gen_parse_from_str(raw_name, &dts, string_intern);
+@@ -308,37 +319,19 @@ fn gen_one_rel_nonnullary(
+         }
+     };
+ 
+-    Ok(quote! {
+-        /// Input handler for the relation.
+-        ///
+-        /// - Parses tuples using the relation delimiter.
+-        /// - Shards updates by the first column across `peers`.
+-        /// - Reports parse / I/O errors to stderr and skips malformed rows.
+-        #[allow(dead_code)]
+-        pub(crate) struct #struct_name {
+-            h: Option<InputSession<Ts, #tuple_ty, Diff>>,
+-            delim: u8,
+-            has_header: bool,
+-        }
+-
+-        impl #struct_name {
+-            /// Create a new handler.
+-            pub fn new(h: InputSession<Ts, #tuple_ty, Diff>) -> Self {
+-                Self {
+-                    h: Some(h),
+-                    delim: #delim_byte,
+-                    has_header: #has_header,
+-                }
+-            }
+-
+-            /// Borrow the underlying input session.
+-            #[inline]
+-            fn h_mut(&mut self) -> &mut InputSession<Ts, #tuple_ty, Diff> {
+-                self.h.as_mut().unwrap()
+-            }
++    // DOOP `= True` programs declare IDB relations with tuple-typed columns
++    // (e.g. `mainAnalysis.OptInterproceduralAssign`). Such relations are never
++    // read from `.facts`, so emit empty input handlers for them: the scalar
++    // parse/shard machinery cannot express a tuple column and would not be
++    // exercised anyway. (Env patch for the tuple-EDB grammar; identical in
++    // base + w3, so the fusion stays the only compiler difference.)
++    let has_tuple_col = dts.iter().any(|d| matches!(d, DataType::FixedTuple(_)));
++    let apply_tuple_fn = if has_tuple_col {
++        quote! {
++            fn apply_tuple(&mut self, _tuple: &str, _diff: Diff, _peers: usize, _index: usize) {}
+         }
+-
+-        impl Relation for #struct_name {
++    } else {
++        quote! {
+             fn apply_tuple(&mut self, tuple: &str, diff: Diff, peers: usize, index: usize) {
+                 let tuple = tuple.trim();
+                 let delim = self.delim as char;
+@@ -349,7 +342,14 @@ fn gen_one_rel_nonnullary(
+                 #shard_tuple
+                 self.h_mut().update(#update_expr, diff);
+             }
+-
++        }
++    };
++    let apply_file_fn = if has_tuple_col {
++        quote! {
++            fn apply_file(&mut self, _path: &Path, _diff: Diff, _peers: usize, _index: usize) {}
++        }
++    } else {
++        quote! {
+             fn apply_file(&mut self, path: &Path, diff: Diff, peers: usize, index: usize) {
+                 let load_start = Instant::now();
+                 let (mut reader, byte_budget) = match __byte_range_reader(path, index, peers) {
+@@ -403,6 +403,43 @@ fn gen_one_rel_nonnullary(
+                     println!("{:?}:\tData loaded for {}", load_start.elapsed(), #raw_name);
+                 }
+             }
++        }
++    };
++
++    Ok(quote! {
++        /// Input handler for the relation.
++        ///
++        /// - Parses tuples using the relation delimiter.
++        /// - Shards updates by the first column across `peers`.
++        /// - Reports parse / I/O errors to stderr and skips malformed rows.
++        #[allow(dead_code)]
++        pub(crate) struct #struct_name {
++            h: Option<InputSession<Ts, #tuple_ty, Diff>>,
++            delim: u8,
++            has_header: bool,
++        }
++
++        impl #struct_name {
++            /// Create a new handler.
++            pub fn new(h: InputSession<Ts, #tuple_ty, Diff>) -> Self {
++                Self {
++                    h: Some(h),
++                    delim: #delim_byte,
++                    has_header: #has_header,
++                }
++            }
++
++            /// Borrow the underlying input session.
++            #[inline]
++            fn h_mut(&mut self) -> &mut InputSession<Ts, #tuple_ty, Diff> {
++                self.h.as_mut().unwrap()
++            }
++        }
++
++        impl Relation for #struct_name {
++            #apply_tuple_fn
++
++            #apply_file_fn
+ 
+             #apply_inline_impl
+ 
+@@ -502,9 +539,10 @@ fn gen_parse_from_str(rel_label: &str, dts: &[DataType], string_intern: bool) ->
+                     };
+                     quote! { #get #field }
+                 }
+-                // Records never appear in EDB facts (constructed by rules only).
++                // Dead code: DOOP tuple-typed IDB relations have no .facts, so this
++                // parse is never reached. Must still compile; runtime-unreachable.
+                 DataType::FixedTuple(_) => {
+-                    unreachable!("tuple-typed columns cannot be parsed from EDB facts")
++                    quote! { let #v = ::std::unreachable!("tuple-typed EDB parse is dead code (IDB tuple relation)"); }
+                 }
+             }
+         })
+@@ -630,9 +668,10 @@ fn gen_parse_from_bytes(rel_label: &str, dts: &[DataType], string_intern: bool)
+                         #field
+                     }
+                 }
+-                // Records never appear in EDB facts (constructed by rules only).
++                // Dead code: DOOP tuple-typed IDB relations have no .facts, so this
++                // parse is never reached. Must still compile; runtime-unreachable.
+                 DataType::FixedTuple(_) => {
+-                    unreachable!("tuple-typed columns cannot be parsed from EDB facts")
++                    quote! { let #v = ::std::unreachable!("tuple-typed EDB parse is dead code (IDB tuple relation)"); }
+                 }
+             }
+         })
+diff --git a/flowlog-compiler/src/scaffold.rs b/flowlog-compiler/src/scaffold.rs
+index c25fcd1..d7a0adb 100644
+--- a/flowlog-compiler/src/scaffold.rs
++++ b/flowlog-compiler/src/scaffold.rs
+@@ -167,6 +167,15 @@ pub(crate) fn render_cargo_toml(config: &Config, features: &Features) -> String
+     if !rendered.ends_with('\n') {
+         rendered.push('\n');
+     }
++    // Build *this* generated crate at opt-level 1 (its ~29k-line function makes
++    // opt-level 3 LLVM compiles intractable for large DOOP programs) while
++    // leaving dependencies (timely / differential-dataflow) at the default
++    // release opt-level 3 for full runtime speed. Env knob for the benchmark;
++    // identical for base + w3, so the planner fusion stays the only variable.
++    rendered.push_str(&format!(
++        "\n[profile.release]\nopt-level = 3\n\n[profile.release.package.\"{}\"]\nopt-level = 1\n",
++        config.crate_name()
++    ));
+     rendered
+ }
+ 
