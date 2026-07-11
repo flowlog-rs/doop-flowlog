@@ -92,3 +92,16 @@ which PR flowlog#218 fixes (see `../w3-fusion-check/`). The other 16 families: F
 
 `results_tomcat.tsv`, `results_lusearch.tsv`, `results_cassandra.tsv` — per-family rows, wall, peak
 RSS, SF/FL speedup, byte-exact verdict, and the `only_FL`/`only_SF` diff counts.
+
+## Post-merge update — the `ord` fix (#208) landed in `main-next`
+
+flowlog#208 was **merged into `main-next` at `7588f68`**. `merged208_verification.md` re-runs 5
+datasets × 4 families (**20 cells**) with a compiler built from the merged code:
+
+- **Determinism: 20/20** — FlowLog `-w32` run1 == run2 in every cell (and `-w1 == -w32` where
+  measured). The merged fix eliminates the multithreaded nondeterminism.
+- **Cross-engine: 16/16 byte-exact** on four fresh datasets (xalan, avrora, zxing, sunflow);
+  **cassandra still 4/4 DIFF**, deterministically and by the same margins — confirming the
+  divergence is the `min ord` representative choice (`cassandra_rootcause.md`), not nondeterminism.
+
+Data: `merged208_results.tsv`; runner: `verify_merged.sh`.
