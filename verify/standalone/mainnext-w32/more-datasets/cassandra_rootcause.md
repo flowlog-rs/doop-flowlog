@@ -8,23 +8,46 @@ program selecting a **merged-exception-heap representative** via `min ord(?heapR
 `ord()` is an engine-internal string-interning ordinal that is **not portable across engines**.
 FlowLog's analysis is sound and semantically equivalent to Soufflé's.
 
-## The mechanism (official Soufflé `1-type-sensitive.dl`, lines ~2346–2353)
+## The mechanism (type-based exception-heap merge)
+
+DOOP merges every allocation of a heavily-allocated type (exceptions like
+`java.lang.NullPointerException` clear the `MethodAllocationMergeThreshold(50)`) into a single
+representative, chosen by **`min(ord(heap))`** over the merged sites:
 
 ```prolog
-MinRepresentativeHeapToPickFromOrdinal(?minHeapReprOrd, ?heap) :-
-  RepresentativesToPickFrom(_, ?heap),
-  ?minHeapReprOrd = min ord(?heapRepr): RepresentativesToPickFrom(?heapRepr, ?heap).
-HeapAllocation_Merge(?heap, ?mergeHeap) :-
-  isHeapAllocation(?mergeHeap),
-  ord(?mergeHeap) = ?minHeapReprOrd,
-  MinRepresentativeHeapToPickFromOrdinal(?minHeapReprOrd, ?heap).
+MinHeapOrdinalPerType(min(ord(heap)), type) :- TypeToMergedHeap(heap, type).
+TypeToRepresentative(type, representativeHeap) :-
+  isHeapAllocation(representativeHeap),
+  MinHeapOrdinalPerType(minHeapOrd, type),
+  ord(representativeHeap) = minHeapOrd.
+HeapRepresentative(representativeHeap, heap) :-
+  TypeToRepresentative(type, representativeHeap), TypeToMergedHeap(heap, type).
 ```
 
-When several allocation sites collapse into one abstract heap, DOOP names it by the candidate
-with the **smallest `ord`**. `ord()` returns the engine's interning ordinal; FlowLog and Soufflé
-intern strings in different orders, so `min ord(...)` can select a different — but equally
-valid — representative. On luindex/eclipse/tomcat/lusearch the tie-break coincides (byte-exact);
-on cassandra it does not.
+(An analogous `MinHeapOrdinalPerPackageAndType` rule does the same per package+type.) The
+representative is the merged site with the **smallest `ord`**. `ord()` returns the engine's
+interning ordinal — in FlowLog literally the `Spur` interner key
+(`flowlog-build/src/codegen/arg.rs`: `ord(s) = s.into_inner().get()`), i.e. the string's
+**load/interning order**; in Soufflé the symbol-table index. FlowLog interns during a serial
+worker-0 fact load (post-#208) in its own EDB/file order; Soufflé in its own. The orders differ,
+so `min(ord(heap))` selects a different — but equally valid — representative. On
+luindex/eclipse/tomcat/lusearch the tie-break coincides (byte-exact); on cassandra it does not.
+
+## Decisive experiment — same merge class, different `min ord` pick (not an upstream bug)
+
+Both programs were instrumented (`.output HeapAllocation_Merge`, `.output
+RepresentativesToPickFrom`) and re-run on cassandra:
+
+| check | FlowLog | Soufflé |
+|---|--:|--:|
+| NPE allocation-sites merged (`HeapAllocation_Merge` LHS) | 664 | 664 — **byte-identical set** (only_FL=0, only_SF=0) |
+| distinct representative chosen | 1 (`TlsPrfParameterSpec`) | 1 (`UnmodifiableCollection`) |
+
+Both engines fold the **exact same 664 sites** into one object — so the *analysis* (what gets
+merged) is identical; only the `min(ord)` label differs. Because the set is identical but the
+argmin differs, the two engines necessarily assign **inverted `ord`** to these strings:
+`ord_FL(TlsPrf) < ord_FL(Unmodifiable)` but `ord_SF(TlsPrf) > ord_SF(Unmodifiable)`. That single
+inversion is the entire cause.
 
 ## The single diverging heap
 
