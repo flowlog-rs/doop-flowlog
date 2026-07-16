@@ -15,6 +15,13 @@ rebuild and re-run without the original `/dev/shm` scratch state.
 - The 5 untested families failed on the **Soufflé side** (single-core OOM/timeout/error),
   not FlowLog.
 
+> 📊 **Parallel (`-w32`/`-j32`) run on current `main-next`:** see
+> [`main-next-w32/`](main-next-w32/). All **19/19 byte-exact** and FlowLog **~3×
+> faster** (1.67–6.35×) — and, notably, **byte-exact even at `-w32`** (the earlier
+> multi-threaded non-determinism is gone). It uses the bare-grammar / non-tuple-EDB
+> programs, since the `nemo/tuple` standalone programs still panic on `main-next`
+> (see the tuple-EDB note below).
+
 ## Coverage & handover (→ run on a more powerful machine)
 
 FlowLog **supports running 24 families** (the `verify.sh` default set — the full
