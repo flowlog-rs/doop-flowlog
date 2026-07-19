@@ -38,6 +38,8 @@ class Doop {
 	static String souffleAnalysesCache
  	static String lbAnalysesPath
 	static String souffleAnalysesPath
+	static String flowlogLogicPath
+	static String flowlogAnalysesPath
 	static boolean initialized = false
 
 	/**
@@ -67,6 +69,8 @@ class Doop {
 		souffleAnalysesCache = "$doopCache/souffle-analyses"
 		lbAnalysesPath = "$lbLogicPath/analyses"
 		souffleAnalysesPath = "$souffleLogicPath/analyses"
+		flowlogLogicPath = "$doopHome/flowlog-logic"
+		flowlogAnalysesPath = "$flowlogLogicPath/analyses"
 
 		[doopOut, doopCache, doopLog, doopTmp, souffleAnalysesCache].each {
 			def f = new File(it)

@@ -785,6 +785,29 @@ abstract class DoopAnalysis extends Analysis implements Runnable {
     }
 
     /**
+     * Appends any user-supplied {@code --extra-logic} {@code .dl} files to the
+     * assembled analysis. Non-{@code .dl} paths are skipped (a safety check so
+     * the mechanism cannot be used to read arbitrary files). Shared by the
+     * Souffle and FlowLog backends.
+     */
+    protected void includeExtraLogic(File analysis) {
+        if (options.EXTRA_LOGIC.value) {
+            Collection<String> extras = options.EXTRA_LOGIC.value as List<String>
+            for (String extraFile : extras) {
+                File extraLogic = new File(extraFile)
+                if (!extraLogic.exists())
+                    throw new RuntimeException("Extra logic file does not exist: ${extraLogic}")
+                String extraLogicPath = extraLogic.canonicalPath
+                if (extraLogicPath.endsWith('.dl')) {
+                    log.info "Adding extra logic file ${extraLogicPath}"
+                    cpp.includeAtEnd("${analysis}", extraLogicPath)
+                } else
+                    log.warn "WARNING: Ignoring file not ending in .dl: ${extraLogicPath}"
+            }
+        }
+    }
+
+    /**
      * Invokes a fact generator, either in isolated mode (invoked as external Java
      * process) or via reflection. (Choice controlled by X_ISOLATE_FACTGEN option
      * and availability of the fact generator as a library.)
