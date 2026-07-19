@@ -1,0 +1,47 @@
+// Context-sensitive pointer analysis with context of 2 object and a
+// context-sensitive heap abstraction.
+
+#include "../../main/single-phase-analysis.dl"
+#include "../../main/configuration.dl"
+
+.comp TwoObjectSensitivePlusTwoHeapConfiguration : AbstractConfiguration {
+  // In this analysis, both the real context and the real heap context are pairs
+  // of Values. Keeping mapping functions is the way to handle analyses
+  // where HContext = Context (since the language considers them different
+  // types).
+
+  .type Context  = ( value1:Value, value2:Value )
+  .type HContext = ( value1:Value, value2:Value )
+
+
+  // For this analysis the context of a method call corresponds to the
+  // identity of the receiver object and the receiver object of the caller.
+  // Again, this may trigger creation of a new object.
+  ContextResponse(callerCtx, hctx, invo, value, tomethod, calleeCtx) :-
+    ContextRequest(callerCtx, hctx, invo, value, tomethod, _),
+    hctx = (hctxValue1, hctxValue2),
+    calleeCtx = (hctxValue2, value),
+    hctxValue1 = hctxValue1.
+
+  StaticContextResponse(callerCtx, invo, calleeCtx) :-
+    StaticContextRequest(callerCtx, invo),
+    calleeCtx = callerCtx.
+
+  // For this analysis, every heap context recorded on allocation
+  // corresponds to the most significant element of the calling
+  // context of the allocator method.
+  RecordContextResponse(ctx, value, var, hctx) :-
+    RecordContextRequest(ctx, value, var),      
+    ctx = (ctxValue1, ctxValue2),
+    hctx = (ctxValue1, ctxValue2).
+
+  InitContextResponse(value, ctx) :-
+    InitContextRequest(value),
+    ctx = (value, value).
+
+  InitHContextResponse(value, hctx) :-
+     InitHContextRequest(value),
+     hctx = (value, value).
+
+
+}

@@ -1,0 +1,48 @@
+// Context-sensitive pointer analysis with context of 3 types and a
+// context-sensitive heap abstraction.
+
+#include "../../main/single-phase-analysis.dl"
+#include "../../main/configuration.dl"
+
+.comp ThreeTypeSensitivePlusTwoHeapConfiguration : AbstractConfiguration {
+
+  // In this analysis, the real context is a triplet of Types and the real heap
+  // context a pair of Types. The type is not always a class type, because of
+  // arrays currently being a non-class subtype of Object.
+  .type Context  = ( type1:Type, type2:Type, type3:Type )
+  .type HContext = ( type1:Type, type2:Type )
+
+  ContextResponse(callerCtx, hctx, invo, value, tomethod, calleeCtx) :-
+    ContextRequest(callerCtx, hctx, invo, value, tomethod, _),
+    hctx = (hctxType1, hctxType2),
+    Value_DeclaringType(value, type),
+    calleeCtx = (hctxType1, hctxType2, type).
+
+  StaticContextResponse(callerCtx, invo, calleeCtx) :-
+    StaticContextRequest(callerCtx, invo),
+    calleeCtx = callerCtx.
+
+  RecordContextResponse(ctx, value, var, hctx) :-
+    RecordContextRequest(ctx, value, var),      
+    ctx = (ctxType1, ctxType2, ctxType3),
+    hctx = (ctxType2, ctxType3),
+    ctxType1 = ctxType1.
+
+  InitContextResponse(value, ctx) :-
+    InitContextRequest(value),
+    ctx = (value, value, "java.lang.String").
+
+  InitHContextResponse(value, hctx) :-
+    InitHContextRequest(value),
+    hctx = (value, value).
+
+  /**
+   * Special calling contexts
+   */
+  PlusType("<<initial-context>>").
+  PlusType("<<jvm-startup-context>>").
+  PlusType("<<jvm-startup-hcontext>>").
+  PlusType("<<clinit-context>>").
+  PlusType("<<immutable-context>>").
+  PlusType("<<immutable-hcontext>>").
+}

@@ -1,0 +1,286 @@
+// Context-sensitive pointer analysis with context of 2 object and a
+// context-sensitive heap abstraction.
+
+#include "../../main/single-phase-analysis.dl"
+#include "../../main/configuration.dl"
+
+.type ContextComponent = Type | Value
+
+// For this analysis the context of a method call corresponds to the
+// identity of the receiver object and the receiver object of the caller.
+// Again, this may trigger creation of a new object.
+.comp FullyGuidedContextSensitiveConfiguration : AbstractConfiguration {
+
+// Do not indent: this breaks some cpp versions.
+#define NO_CONTEXT_ELEMENT "<<immutable-context>>"
+
+  // In this analysis, the real context is a pair of Values and the real
+  // heap context a single Value.
+  .type Context  = ( value1:ContextComponent, value2:ContextComponent )
+  .type HContext = ( value:ContextComponent )
+
+  // ToTypeString maps a (value or type) string to a string representation of a type.
+  // It is useful for generating 2-type-sensitive contexts.
+  .decl ToTypeString(valueOrType:symbol, type:symbol)
+
+    // If the given string already represents a type, then return it directly.
+    ToTypeString(elem, type) :-
+        HContextElement(elem),
+        isType(elem),
+        type = elem.
+
+    // If the given string represents a heap object, then return the string
+    // of the type which declares the allocation site of the heap object.
+    ToTypeString(elem, type) :-
+        HContextElement(elem),
+        !isType(elem),
+        !SpecialContextElement(elem),
+        Value_DeclaringType(elem, type).
+
+    // Handle special context objects.
+    ToTypeString(elem, elem) :-
+        SpecialContextElement(elem).
+
+    .decl HContextElement(elem:symbol)
+    HContextElement(elem) :-
+        ContextRequest(_, hctx, _, _, _, _),
+        hctx = (elem,).
+
+    .decl SpecialContextElement(value:symbol)
+    SpecialContextElement("<<immutable-context>>").
+    SpecialContextElement("<<immutable-hcontext>>").
+
+
+    // 2-object
+    TwoObjectMethod(tomethod),
+    ContextResponse(callerCtx, hctx, invo, value, tomethod, calleeCtx) :-
+      ContextRequest(callerCtx, hctx, invo, value, tomethod, _),
+      SpecialContextSensitivityMethod(tomethod, "2-object", _, _),
+      hctx = (hctxValue,),
+      calleeCtx = (hctxValue, value).
+
+    // 2-type
+    TwoTypeMethod(tomethod),
+    ContextResponse(callerCtx, hctx, invo, value, tomethod, calleeCtx) :-
+      ContextRequest(callerCtx, hctx, invo, value, tomethod, _),
+      SpecialContextSensitivityMethod(tomethod, "2-type", _, _),
+      hctx = (hctxValue,),
+      ToTypeString(hctxValue, type1),
+      Value_DeclaringType(value, type2),
+      calleeCtx = (type1, type2).
+
+    // 1-type
+    OneTypeMethod(tomethod),
+    ContextResponse(callerCtx, hctx, invo, value, tomethod, calleeCtx) :-
+      ContextRequest(callerCtx, hctx, invo, value, tomethod, _),
+      SpecialContextSensitivityMethod(tomethod, "1-type", _, _),
+      Value_DeclaringType(value, type),
+      calleeCtx = (NO_CONTEXT_ELEMENT, type).
+
+    // context-insensitive
+    ContextInsensitiveMethod(tomethod),
+    ContextResponse(callerCtx, hctx, invo, value, tomethod, calleeCtx) :-
+      ContextRequest(callerCtx, hctx, invo, value, tomethod, _),
+      SpecialContextSensitivityMethod(tomethod, "context-insensitive", _, _),
+      isImmutableContext(calleeCtx).
+
+
+    // Scaler behaviour, keep caller contexts for static invocations
+    /**StaticContextResponse(callerCtx, invo, calleeCtx) :-
+         StaticContextRequest(callerCtx, invo),
+        calleeCtx = callerCtx.
+    **/
+
+    // Oracular behaviour, keep caller contexts if method is analyzed
+    // sensitively, drop context if method is analyzed insensitively
+    TwoObjectMethod(tomethod),
+    StaticContextResponse(callerCtx, invo, calleeCtx) :-
+       StaticContextRequest(callerCtx, invo),
+       MethodInvocation_Method(invo, tomethod),
+       SpecialContextSensitivityMethod(tomethod, sensitivity, _, _),
+       sensitivity = "2-object",
+       calleeCtx = callerCtx.
+
+    TwoTypeMethod(tomethod),
+    StaticContextResponse(callerCtx, invo, calleeCtx) :-
+        StaticContextRequest(callerCtx, invo),
+        MethodInvocation_Method(invo, tomethod),
+        SpecialContextSensitivityMethod(tomethod, sensitivity, _, _),
+        sensitivity = "2-type",
+        callerCtx = (type1, type2),
+        isType(type1),
+        isType(type2),
+        calleeCtx = callerCtx.
+
+    TwoTypeMethod(tomethod),
+    StaticContextResponse(callerCtx, invo, calleeCtx) :-
+      StaticContextRequest(callerCtx, invo),
+      MethodInvocation_Method(invo, tomethod),
+      SpecialContextSensitivityMethod(tomethod, sensitivity, _, _),
+      sensitivity = "2-type",
+      callerCtx = (type, value),
+      isType(type),
+      isValue(value),
+      mainAnalysis.Value_DeclaringType(value, type1),
+      calleeCtx = (type, type1).
+
+    TwoTypeMethod(tomethod),
+    StaticContextResponse(callerCtx, invo, calleeCtx) :-
+      StaticContextRequest(callerCtx, invo),
+      MethodInvocation_Method(invo, tomethod),
+      SpecialContextSensitivityMethod(tomethod, sensitivity, _, _),
+      sensitivity = "2-type",
+      callerCtx = (value, type),
+      isType(type),
+      isValue(value),
+      mainAnalysis.Value_DeclaringType(value, type1),
+      calleeCtx = (type1, type).
+
+    TwoTypeMethod(tomethod),
+    StaticContextResponse(callerCtx, invo, calleeCtx) :-
+      StaticContextRequest(callerCtx, invo),
+      MethodInvocation_Method(invo, tomethod),
+      SpecialContextSensitivityMethod(tomethod, sensitivity, _, _),
+      sensitivity = "2-type",
+      callerCtx = (value1, value2),
+      isValue(value1),
+      isValue(value2),
+      mainAnalysis.Value_DeclaringType(value1, type1),
+      mainAnalysis.Value_DeclaringType(value2, type2),
+      calleeCtx = (type1, type2).
+
+   OneTypeMethod(tomethod),
+   StaticContextResponse(callerCtx, invo, calleeCtx) :-
+      StaticContextRequest(callerCtx, invo),
+      MethodInvocation_Method(invo, tomethod),
+      SpecialContextSensitivityMethod(tomethod, sensitivity, _, _),
+      sensitivity = "1-type",
+      callerCtx = (valueOrType, value),
+      isValue(value),
+      mainAnalysis.Value_DeclaringType(value, type),
+      calleeCtx = (type, type),
+      valueOrType = valueOrType.
+
+   OneTypeMethod(tomethod),
+   StaticContextResponse(callerCtx, invo, calleeCtx) :-
+      StaticContextRequest(callerCtx, invo),
+      MethodInvocation_Method(invo, tomethod),
+      SpecialContextSensitivityMethod(tomethod, sensitivity, _, _),
+      sensitivity = "1-type",
+      callerCtx = (valueOrType, type),
+      isType(type),
+      calleeCtx = (type, type),
+      valueOrType = valueOrType.
+
+    ContextInsensitiveMethod(tomethod),
+    StaticContextResponse(callerCtx, invo, calleeCtx) :-
+       StaticContextRequest(callerCtx, invo),
+       MethodInvocation_Method(invo, tomethod),
+       SpecialContextSensitivityMethod(tomethod, sensitivity, _, _),
+       sensitivity = "context-insensitive",
+       isImmutableContext(calleeCtx).
+
+    // Pick last context elements of as heap context
+    RecordContextResponse(ctx, value, var, hctx) :-
+      RecordContextRequest(ctx, value, var),
+      //!InsensitiveVar(?var),
+      ctx = (ctxValue1, ctxValue2),
+      hctx = (ctxValue2,),
+      ctxValue1 = ctxValue1.
+
+    //RecordContextResponse(?immCtx, ?value, ?var, ?hctx) :-
+    //  RecordContextRequest(?ctx, ?value, ?var),
+    //  InsensitiveVar(?var),
+    //  ?ctx = [?ctxValue1, ?ctxValue2],
+    //  ?hctx = [?ctxValue2],
+    //  isImmutableContext(?immCtx).
+
+    // RecordContextResponse(?ctx, ?value, ?var, ?hctx) :-
+    //     RecordContextRequest(?ctx, ?value, ?var),
+    //     Var_DeclaringMethod(?var, ?method),
+    //     SpecialContextSensitivityMethod(?method, "context-insensitive", _, _),
+    //     isImmutableHContext(?hctx).
+
+    InitContextResponse(value, ctx) :-
+      InitContextRequest(value),
+      ctx = (value, value).
+
+    InitHContextResponse(value, hctx) :-
+      InitHContextRequest(value),
+      hctx = (value,).
+
+    .decl SpecialContextSensitivityMethod(method:Method, sensivity:symbol, predictedWorstCaseContexts:number, predictedWorstCaseVPT:number)
+    .input SpecialContextSensitivityMethod(IO="file", filename="SpecialContextSensitivityMethod.facts", delimiter="\t")
+
+    .decl SpecialContextSensitivityMethodNotPresentViolation(method:Method)
+
+    SpecialContextSensitivityMethodNotPresentViolation(method) :-
+      SpecialContextSensitivityMethod(method, _, _, _),
+      !isMethod(method).
+
+    .decl NoSensitivityViolation(method:Method)
+
+    NoSensitivityViolation(method) :-
+      Reachable(method),
+      !SpecialContextSensitivityMethod(method, _, _, _).
+
+    .decl TwoObjectMethod(method:Method)
+    .decl TwoTypeMethod(method:Method)
+    .decl OneTypeMethod(method:Method)
+    .decl ContextInsensitiveMethod(method:Method)
+
+    .printsize TwoObjectMethod
+    .output TwoObjectMethod
+    .printsize TwoTypeMethod
+    .output TwoTypeMethod
+    .printsize OneTypeMethod
+    .output OneTypeMethod
+    .printsize ContextInsensitiveMethod
+    .output ContextInsensitiveMethod
+    .printsize NoSensitivityViolation
+    .output NoSensitivityViolation
+    .printsize SpecialContextSensitivityMethodNotPresentViolation
+    .output SpecialContextSensitivityMethodNotPresentViolation
+
+    .decl Method_NumberOfContexts(method:Method, n:number)
+
+    Method_NumberOfContexts(method, n) :-
+      Reachable(method),
+      n =  count : {ReachableContext(_, method)}.
+
+    .output Method_NumberOfContexts
+
+    .decl VPTCountPerMethodVariable(method:Method, var:Var, n:number)
+
+    VPTCountPerMethodVariable(method, var, Y) :-
+       Var_DeclaringMethod(var, method),
+       Y =  count : {mainAnalysis.VarPointsTo(_, _, _, var)}.
+
+    .decl MethodTotalVPT(method:Method, Y:number)
+
+    MethodTotalVPT(method, Y) :-
+      mainAnalysis.Reachable(method),
+      Y = sum n : {VPTCountPerMethodVariable(method, _, n)}.
+
+    MethodTotalVPT(method, 0) :-
+      mainAnalysis.Reachable(method),
+      !Var_DeclaringMethod(_, method).
+
+    .output MethodTotalVPT
+
+    .decl MethodCostPredictionViolation(method:Method, predictedCost:number, actualCost:number)
+    .output MethodCostPredictionViolation
+
+    MethodCostPredictionViolation(method, predictedCost, actualCost) :-
+      MethodTotalVPT(method, actualCost),
+      SpecialContextSensitivityMethod(method, _, _, predictedCost),
+      predictedCost < actualCost.
+
+    .decl MethodContext(method: Method, ctx1: ContextComponent, ctx2: ContextComponent)
+
+    MethodContext(method, ctx1, ctx2) :-
+      mainAnalysis.ReachableContext(ctx, method),
+      ctx = (ctx1, ctx2).
+
+    .output MethodContext
+}

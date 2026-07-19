@@ -1,0 +1,775 @@
+#include "init.dl"
+
+/**
+ * Generic context-sensitive pointer analysis, and more
+ */
+
+
+/**
+ * Reachable values: useful even when points-to analysis is limited
+ */
+.decl ReachableValue(hctx:configuration.HContext, value: Value)
+#ifdef CHOICE_BOUND
+
+VarPointsTo(hctx, value, ctx, var) :-    
+  VarPointsTo_Bounded(hctx, value, ctx, var, _).
+
+#endif   
+
+/*** ORACULAR BEGIN ***/
+// .decl Method_NumberOfContexts(method:Method, n:number)
+
+// Method_NumberOfContexts(method, n) :-
+//       mainAnalysis.Reachable(method),
+//       n =  count : {ReachableContext(_, method)}.
+
+// .output Method_NumberOfContexts
+
+// .decl VPTCountPerMethodVariable(method:Method, var:Var, n:number)
+
+// VPTCountPerMethodVariable(method, var, Y) :-
+//     Var_DeclaringMethod(var, method),
+//     Y =  count : {mainAnalysis.VarPointsTo(_, _, _, var)}.
+
+// .decl MethodTotalCost(method:Method, Y:number)
+
+// MethodTotalCost(method, Y) :-
+//     mainAnalysis.Reachable(method),
+//     Y = sum n : {VPTCountPerMethodVariable(method, _, n)}.
+
+// MethodTotalCost(method, 0) :-
+//     mainAnalysis.Reachable(method),
+//     !Var_DeclaringMethod(_, method).
+
+// .output MethodTotalCost
+/*** ORACULAR END ***/
+
+
+
+ReachableValue(hctx, heapValue) :-
+  AssignContextInsensitiveHeapAllocation(heapValue, _, inmethod),
+  ReachableContext(_, inmethod),
+  isImmutableHContext(hctx).
+
+isHContext(newHCtx),
+ReachableValue(newHCtx, heapValue) :-
+  configuration.RecordContextRequest(ctx, heapValue, var),
+  configuration.RecordContextResponse(ctx, heapValue, var, newHCtx).
+
+// REVIEW: a catch-all hack: there are still corners where the logic is centered
+// around VarPointsTo. Cover them as best as one can, by inferring ReachableValue.
+// Ideally, this rule will be deprecated in the long term, by carefully going over
+// all current logic and adding counterparts to the VarPointsTo-inferring rules
+// to also produce useful information (e.g., ReachableValue) when points-to
+// analysis is disabled.
+ReachableValue(hctx, value) :-
+  VarPointsTo(hctx, value, _, _).
+
+.decl TypeHasReachableValue(valueType: Type)
+TypeHasReachableValue(valueType) :-
+  ReachableValue(_, value),
+  Value_Type(value, valueType).
+
+
+/**
+ * Heap allocation
+ */
+
+configuration.RecordContextRequest(ctx, heapValue, var) :-
+  AssignNormalHeapAllocation(heapValue, var, inmethod),
+  ReachableContext(ctx, inmethod).
+
+#ifndef DISABLE_POINTS_TO
+
+BOUND_VAR_POINTS_TO(newHCtx, heapValue, ctx, var) :-
+  configuration.RecordContextRequest(ctx, heapValue, var),
+  configuration.RecordContextResponse(ctx, heapValue, var, newHCtx).
+
+BOUND_VAR_POINTS_TO(hctx, heapValue, ctx, var) :-
+  Reachable(inmethod),  // optimization purposes
+  AssignContextInsensitiveHeapAllocation(heapValue, var, inmethod),
+  ReachableContext(ctx, inmethod),
+  isImmutableHContext(hctx).
+
+/**
+ * Null assignments
+ */
+
+BOUND_VAR_POINTS_TO(hctx, null, toCtx, to) :-
+   Reachable(inmethod),  // optimization purposes
+   AssignNull(to, inmethod),
+   Value_Null(null),
+   ReachableContext(toCtx, inmethod),
+   isImmutableHContext(hctx).
+
+#ifdef ANDROID
+/**
+ * Assignment of numeric constant. Currently context-insensitive and
+ * only used for Android analyses, hence the ad hoc logic to match
+ * a specific host class (R).
+ */
+
+BOUND_VAR_POINTS_TO(hctx, value, toCtx, to) :-
+   ReachableContext(toCtx, inmethod),
+   Instruction_Method(insn, inmethod),
+   (AssignNumConstant_Id(insn, const);
+    AssignCastNumConstant_Id(insn, const)),
+   AssignInstruction_To(insn, to),
+   NumConstantRawInt(const, toType),
+   Var_Type(to, toType),
+   Value_Num(value, const, toType),
+   isImmutableHContext(hctx).
+#endif // ANDROID
+
+#endif // DISABLE_POINTS_TO
+
+// No need to check if type compatible: check is done at original
+// inputs to VarPointsTo
+
+BOUND_VAR_POINTS_TO(hctx, value, ctx, to) :-
+  VarPointsTo(hctx, value, ctx, from),
+  AssignLocal(from, to, _).
+
+/**
+ * Cast assignments
+ */
+
+BOUND_VAR_POINTS_TO(hctx, value, ctx, to) :-
+  OptAssignCast(type, to, from),
+  VarPointsTo(hctx, value, ctx, from),
+  Value_Type(value, valuetype),
+  basic.SupertypeOf(type, valuetype).
+
+.decl OptAssignCast(type:Type, to:Var, from:Var)
+OptAssignCast(type, to, from) :-
+  Reachable(inmethod),
+  AssignCast(type, from, to, inmethod).
+
+/**
+ * Load/Store instance fields
+ */
+
+LoadHeapInstanceField(ctx, to, sig, basehctx, basevalue) :-
+  LoadInstanceField(base, sig, to, _),
+  VarPointsTo(basehctx, basevalue, ctx, base).
+
+StoreHeapInstanceField(signature, basehctx, basevalue, ctx, from) :-
+  StoreInstanceField(from, base, signature, _),
+  VarPointsTo(basehctx, basevalue, ctx, base).
+
+#if !defined(FEATHERWEIGHT_ANALYSIS) && !defined(DISABLE_POINTS_TO)
+//// Much slower in Souffle, for large analyses
+// VarPointsTo(hctx, value, ctx, to) :-
+//   LoadHeapInstanceField(ctx, to, signature, basehctx, basevalue),
+//   BOUND_INSTANCE_FIELD_POINTS_TO(hctx, value, signature, basehctx, basevalue).
+//    .plan 1:(2,1)
+
+HeapInterproceduralAssign(ctxTo, to, ctxFrom, from) :-
+  LoadHeapInstanceField(ctxTo, to, signature, basehctx, basevalue),
+  StoreHeapInstanceField(signature, basehctx, basevalue, ctxFrom, from),
+  !Value_Null(basevalue).
+
+BOUND_VAR_POINTS_TO(hctx, value, toCtx, to) :-
+  HeapInterproceduralAssign(toCtx, to, fromCtx, from),
+  VarPointsTo(hctx, value, fromCtx, from),
+  NotSpecialObject(value).
+
+BOUND_VAR_POINTS_TO(hctx, value, ctx, to) :-
+  LoadHeapInstanceField(ctx, to, signature, basehctx, basevalue),
+  InstanceFieldPointsTo(hctx, value, signature, basehctx, basevalue).
+
+BOUND_INSTANCE_FIELD_POINTS_TO(hctx, value, signature, basehctx, basevalue) :-
+  StoreHeapInstanceField(signature, basehctx, basevalue, ctx, from),
+  VarPointsTo(hctx, value, ctx, from),
+  NotSpecialObject(value),
+  !Value_Null(basevalue).
+
+#else
+#if defined(FEATHERWEIGHT_ANALYSIS)
+
+BOUND_VAR_POINTS_TO(hctx, value, ctx, to) :-
+  LoadHeapInstanceField(ctx, to, signature, basehctx, basevalue),
+  InstanceFieldPointsTo(hctx, value, signature, basehctx, basevalue).
+
+.decl NoInformationOnSignature(signature: Field)
+.output NoInformationOnSignature
+
+NoInformationOnSignature(signature) :-
+ isField(signature),
+ !DynamicInstanceFieldPointsTo(signature, _, _, _, _).
+
+.decl ConstructorVar(var:Var)
+
+ConstructorVar(var) :-
+  Var_DeclaringMethod(var, meth),
+  ApplicationMethod(meth),
+  basic.ClassConstructor(meth, _).
+
+// anantoni: This seems to be the most efficient version of the commented out rule below
+BOUND_INSTANCE_FIELD_POINTS_TO(hctx, value, signature, basehctx, basevalue) :-
+  StoreHeapInstanceField(signature, basehctx, basevalue, ctx, from),
+  VarPointsTo(hctx, value, ctx, from),
+  ConstructorVar(from),
+  NoInformationOnSignature(signature),
+  Value_byDynamicHeap(_, value),
+  NotSpecialObject(value),
+  !Value_Null(basevalue).
+//.plan 1:(2,1,3,4,5,6)
+/**
+  BOUND_INSTANCE_FIELD_POINTS_TO(hctx, value, signature, basehctx, basevalue) :-
+  StoreHeapInstanceField(signature, basehctx, basevalue, ctx, from),
+  ConstructorVar(from),
+  VarPointsTo(hctx, value, ctx, from),
+  NoInformationOnSignature(signature),
+  Value_byDynamicHeap(_, value),
+  NotSpecialObject(value),
+  !Value_Null(basevalue).
+**/
+#endif // FEATHERWEIGHT_ANALYSIS
+#endif // FEATHERWEIGHT_ANALYSIS, DISABLE_POINTS_TO
+
+
+#if defined(HEAPDLS) || defined(IMPORT_DYNAMIC_FACTS)
+BOUND_INSTANCE_FIELD_POINTS_TO(hctx, value, signature, basehctx, basevalue) :-
+  HeapDLInstanceFieldPointsTo(hctx, value, signature, basehctx, basevalue).
+
+BOUND_VAR_POINTS_TO(hctx, value, ctx, to) :-
+  LoadHeapInstanceField(ctx, to, signature, basehctx, basevalue),
+  HeapDLInstanceFieldPointsTo(hctx, value, signature, basehctx, basevalue).
+#endif // HEAPDLS, IMPORT_DYNAMIC_FACTS
+
+#if defined(FEATHERWEIGHT_ANALYSIS) && defined(INFORMATION_FLOW)
+BOUND_INSTANCE_FIELD_POINTS_TO(hctx, value, signature, basehctx, basevalue) :-
+  StoreHeapInstanceField(signature, basehctx, basevalue, ctx, from),
+  TaintedVarPointsTo(value, ctx, from),
+  isImmutableHContext(hctx),
+  !Value_Null(basevalue).
+#endif // FEATHERWEIGHT_ANALYSIS, INFORMATION_FLOW
+
+
+/**
+ * Load static fields
+ */
+
+BOUND_VAR_POINTS_TO(hctx, value, ctx, to) :-
+  StaticFieldPointsTo(hctx, value, sig),
+  LoadStaticField(sig, to, inmethod),
+  ReachableContext(ctx, inmethod).
+#ifndef X_CONTEXT_REMOVER
+#endif // X_CONTEXT_REMOVER
+
+/**
+ * Store static fields
+ */
+#if !defined(FEATHERWEIGHT_ANALYSIS) && !defined(DISABLE_POINTS_TO)
+StaticFieldPointsTo(hctx, value, signature) :-
+  ReachableStoreStaticFieldFrom(from),
+  StoreStaticField(from, signature, _),
+  VarPointsTo(hctx, value, _, from).
+#endif // FEATHERWEIGHT_ANALYSIS, DISABLE_POINTS_TO
+#if defined(FEATHERWEIGHT_ANALYSIS) && defined(INFORMATION_FLOW)
+StaticFieldPointsTo(hctx, value, signature) :-
+  ReachableStoreStaticFieldFrom(from),
+  StoreStaticField(from, signature, _),
+  TaintedVarPointsTo(value, _, from),
+  isImmutableHContext(hctx).
+#endif // FEATHERWEIGHT_ANALYSIS, INFORMATION_FLOW
+
+.decl ReachableStoreStaticFieldFrom(from:Var)
+
+ReachableStoreStaticFieldFrom(from) :-
+  Reachable(inmethod),
+  StoreStaticField(from, _, inmethod).
+
+#if defined(ANDROID) && !defined(DISABLE_POINTS_TO)
+
+/**
+ * Store default value in static field (Android-only!)
+ */
+StaticFieldPointsTo(hctx, value, signature) :-
+  FieldInitialValue(signature, const),
+  NumConstantRawInt(const, fieldType),
+  Field_Type(signature, fieldType),
+  Value_Num(value, const, fieldType),
+  isImmutableHContext(hctx).
+
+/**
+ * Array elements initialized by local variables (Dalvik filled-new-array*).
+ */
+BOUND_VAR_POINTS_TO(baseHctx, baseHeap, ctx, to),
+ArrayIndexPointsTo(hctx, value, baseHctx, baseHeap) :-
+  VarPointsTo(hctx, value, ctx, from),
+  ArrayInitialValueFromLocal(_, _, to, _, from, baseHeap, _),
+  isImmutableHContext(baseHctx).
+
+/**
+ * Array elements initialized by constants (Dalvik array payloads).
+ */
+BOUND_VAR_POINTS_TO(hctx, baseHeap, ctx, to),
+ArrayIndexPointsTo(hctx, value, hctx, baseHeap) :-
+  ReachableContext(ctx, inMethod),
+  Instruction_Method(i, inMethod),
+  ArrayInitialValueFromConst(i, _, to, _, const, baseHeap, _),
+  NumConstantRawInt(const, toType),
+  Var_Type(to, toType),
+  Value_Num(value, const, toType),
+  isImmutableHContext(hctx).
+
+#endif // ANDROID, DISABLE_POINTS_TO
+
+/**
+ * Load array index
+ */
+
+// Intermediate relations used for optimization purposes
+.decl OptLoadHeapArrayIndex(var:Var, value:Value)
+.decl Temp1(value:Value, var:Var)
+.decl Temp2(ctx:configuration.Context, var:Var, hctx:configuration.HContext, value:Value)
+
+OptLoadHeapArrayIndex(to, basevalue) :-
+  LoadHeapArrayIndex(_, to, _, basevalue).
+
+Temp1(basevalue, to) :-
+  NotEmptyArrayValue(basevalue),
+  OptLoadHeapArrayIndex(to, basevalue),
+  Value_Type(basevalue, basevaluetype),
+  ComponentType(basevaluetype, basecomponenttype),
+  Var_Type(to, type),
+  basic.SupertypeOf(type, basecomponenttype).
+
+Temp2(ctx, to, basehctx, basevalue) :-
+  Temp1(basevalue, to),
+  LoadHeapArrayIndex(ctx, to, basehctx, basevalue).
+
+BOUND_VAR_POINTS_TO(hctx, value, ctx, to) :-
+  Temp2(ctx, to, basehctx, basevalue),
+  ArrayIndexPointsTo(hctx, value, basehctx, basevalue).
+
+// The above logic aims to optimize the following rule:
+//
+// VarPointsTo(hctx, value, ctx, to) :-
+//   NotEmptyArrayValue(basevalue),
+//   LoadHeapArrayIndex(ctx, to, basehctx, basevalue),
+//   ArrayIndexPointsTo(hctx, value, basehctx, basevalue).
+//   // this is necessary to handle untyped array operations, e.g., the
+//   // simulation of arrayCopy calls as Load/Stores
+//   Value_Type(basevalue, basevaluetype),
+//   Var_Type(to, type),
+//   ComponentType(basevaluetype, basecomponenttype),
+//   basic.SupertypeOf(type, basecomponenttype).
+
+.decl NotEmptyArrayValue(value:Value)
+
+NotEmptyArrayValue(heapValue) :-
+  Value_isHeap(heapValue),
+  isHeapAllocation(heapValue),
+  !HeapAllocation_EmptyArray(heapValue).
+NotEmptyArrayValue(value) :-
+  Value_isNonHeap(value).
+
+LoadHeapArrayIndex(ctx, to, basehctx, basevalue) :-
+  ReachableLoadArrayIndexBase(base),
+  OptLoadArrayIndex(to, base),
+  VarPointsTo(basehctx, basevalue, ctx, base).
+
+OptLoadArrayIndex(to, base) :-
+  LoadArrayIndex(base, to, _).
+
+.decl ReachableLoadArrayIndexBase(base:Var)
+
+ReachableLoadArrayIndexBase(base) :-
+  Reachable(inmethod),
+  LoadArrayIndex(base, _, inmethod).
+
+/**
+ * Store array index
+ */
+
+.decl OptStoreIntoArray(hctx:configuration.HContext, value:Value, basehctx:configuration.HContext, basevalue:Value)
+
+#if !defined(FEATHERWEIGHT_ANALYSIS) && !defined(DISABLE_POINTS_TO)
+OptStoreIntoArray(hctx, value, basehctx, basevalue) :-
+  StoreHeapArrayIndex(basehctx, basevalue, ctx, from),
+  VarPointsTo(hctx, value, ctx, from).
+#endif // FEATHERWEIGHT_ANALYSIS, DISABLE_POINTS_TO
+#if defined(FEATHERWEIGHT_ANALYSIS) && defined(INFORMATION_FLOW)
+OptStoreIntoArray(hctx, value, basehctx, basevalue) :-
+  StoreHeapArrayIndex(basehctx, basevalue, ctx, from),
+  TaintedVarPointsTo(value, ctx, from),
+  isImmutableHContext(hctx).
+#endif // FEATHERWEIGHT_ANALYSIS, INFORMATION_FLOW
+
+ArrayIndexPointsTo(hctx, value, basehctx, basevalue) :-
+  OptStoreIntoArray(hctx, value, basehctx, basevalue),
+  NotSpecialObject(value),
+  NotEmptyArrayValue(basevalue),
+  Value_Type(value, valuetype),
+  Value_Type(basevalue, basevaluetype),
+  ComponentType(basevaluetype, componenttype),
+  basic.SupertypeOf(componenttype, valuetype).
+
+StoreHeapArrayIndex(basehctx, basevalue, ctx, from) :-
+  ReachableStoreArrayIndexBase(base),
+  OptStoreArrayIndex(from, base),
+  VarPointsTo(basehctx, basevalue, ctx, base).
+
+.decl ReachableStoreArrayIndexBase(base:Var)
+
+ReachableStoreArrayIndexBase(base) :-
+  Reachable(inmethod),
+  StoreArrayIndex(_, base, inmethod).
+
+OptStoreArrayIndex(from, base) :-
+  StoreArrayIndex(from, base, _).
+
+
+/**
+ * Assignments for method invocations
+ */
+
+// This logic replaces (optimizes) general-purpose inter-procedural
+// assignments for args and returns. It should be unnecessary, but
+// Souffle appreciates smaller deltas, since plans cannot change
+// per-rule-evaluation, only per-rule-structure.
+/*
+OptArgAssign(calleeCtx, formal, callerCtx, actual) :-
+  CallGraphEdge(callerCtx, invocation, calleeCtx, method),
+  ActualParam(index, invocation, actual),
+  FormalParam(index, method, formal).
+*/
+
+OptArgAssign(calleeCtx, formal, callerCtx, actual, allowedType) :-
+  CallGraphEdge(callerCtx, invocation, calleeCtx, method),
+#ifdef PRECISE_GENERICS
+  !isMapPutMethod(method),
+  !isCollectionAddMethod(method),
+#endif
+  ActualParam(index, invocation, actual),
+  FormalParam(index, method, formal),
+  Var_Type(formal, allowedType).
+
+#ifdef PRECISE_GENERICS
+.decl isCollectionAddMethod(method:Method)
+.decl isMapPutMethod(method:Method)
+
+isMapPutMethod(method) :-
+  Method_SimpleName(method, "put"),
+  Method_DeclaringType(method, mapType),
+  basic.SubtypeOf(mapType, "java.util.Map").
+
+isCollectionAddMethod(method) :-
+  Method_SimpleName(method, "add"),
+  Method_DeclaringType(method, collectionType),
+  basic.SubtypeOf(collectionType, "java.util.Collection").
+
+OptArgAssign(calleeCtx, formal, callerCtx, actual, allowedType) :-
+  isMapPutMethod(method),
+  CallGraphEdge(callerCtx, invocation, calleeCtx, method),
+  MethodInvocation_Base(invocation, base),
+  VarPointsTo(_, mapValue, callerCtx, base),
+  (MapAcceptsKeyType(mapValue, allowedType);
+   MapAcceptsKeyFallbackType(mapValue, allowedType)),
+  ActualParam(0, invocation, actual),
+  FormalParam(0, method, formal).
+
+OptArgAssign(calleeCtx, formal, callerCtx, actual, allowedType) :-
+  isMapPutMethod(method),
+  CallGraphEdge(callerCtx, invocation, calleeCtx, method),
+  MethodInvocation_Base(invocation, base),
+  VarPointsTo(_, mapValue, callerCtx, base),
+  (MapAcceptsValueType(mapValue, allowedType);
+   MapAcceptsValueFallbackType(mapValue, allowedType)),
+  ActualParam(1, invocation, actual),
+  FormalParam(1, method, formal).
+
+OptArgAssign(calleeCtx, formal, callerCtx, actual, allowedType) :-
+  isCollectionAddMethod(method),
+  Method_Arity(method, 1),
+  CallGraphEdge(callerCtx, invocation, calleeCtx, method),
+  MethodInvocation_Base(invocation, base),
+  VarPointsTo(_, collectionValue, callerCtx, base),
+  (CollectionAcceptsValueType(collectionValue, allowedType);
+   CollectionAcceptsValueFallbackType(collectionValue, allowedType)),
+  ActualParam(0, invocation, actual),
+  FormalParam(0, method, formal).
+
+OptArgAssign(calleeCtx, formal, callerCtx, actual, allowedType) :-
+  isCollectionAddMethod(method),
+  Method_Arity(method, 2),
+  CallGraphEdge(callerCtx, invocation, calleeCtx, method),
+  MethodInvocation_Base(invocation, base),
+  VarPointsTo(_, collectionValue, callerCtx, base),
+  (CollectionAcceptsValueType(collectionValue, allowedType);
+   CollectionAcceptsValueFallbackType(collectionValue, allowedType)),
+  ActualParam(1, invocation, actual),
+  FormalParam(1, method, formal).
+#endif
+
+#ifdef INFORMATION_FLOW
+
+BOUND_VAR_POINTS_TO(hctx, value, callerCtx, local) :-
+  CallGraphEdge(callerCtx, invocation, calleeCtx, method),
+  AssignReturnValue(invocation, local),
+  ReturnVar(return, method),
+  !SanitizationMethod(method),
+  OptRetVarPointsTo(hctx, value, calleeCtx, return).
+
+BOUND_VAR_POINTS_TO(hctx, value, callerCtx, local) :-
+  CallGraphEdge(callerCtx, invocation, calleeCtx, method),
+  AssignReturnValue(invocation, local),
+  ReturnVar(return, method),
+  OptRetVarPointsTo(hctx, value, calleeCtx, return),
+  isHeapAllocation(value).
+
+#else
+
+OptReturnAssign(callerCtx, local, calleeCtx, return) :-
+  CallGraphEdge(callerCtx, invocation, calleeCtx, method),
+  AssignReturnValue(invocation, local),
+  ReturnVar(return, method).
+
+BOUND_VAR_POINTS_TO(hctx, value, toCtx, to) :-
+  OptRetVarPointsTo(hctx, value, fromCtx, from),
+  OptReturnAssign(toCtx, to, fromCtx, from).
+
+#endif // INFORMATION_FLOW
+
+OptArgVarPointsTo(hctx, value, actualCtx, actual) :-
+  VarPointsTo(hctx, value, actualCtx, actual),
+  ActualParam(_, _, actual).
+
+OptRetVarPointsTo(hctx, value, returnCtx, return) :-
+  VarPointsTo(hctx, value, returnCtx, return),
+  ReturnVar(return, _).
+
+#ifdef INFORMATION_FLOW
+
+BOUND_VAR_POINTS_TO(hctx, value, toCtx, to) :-
+  OptArgVarPointsTo(hctx, value, fromCtx, from),
+  OptArgAssign(toCtx, to, fromCtx, from, allowedType),
+  Value_Type(value, type),
+  basic.SubtypeOf(type, allowedType),
+  isHeapAllocation(value).
+
+BOUND_VAR_POINTS_TO(hctx, value, toCtx, to) :-
+  OptArgVarPointsTo(hctx, value, fromCtx, from),
+  OptArgAssign(toCtx, to, fromCtx, from, allowedType),
+  Value_Type(value, type),
+  basic.SubtypeOf(type, allowedType),
+  Var_DeclaringMethod(to, meth),
+  !SanitizationMethod(meth).
+
+#else
+/**
+ * VarPointsTo(hctx, value, toCtx, to) :-
+ *  OptArgVarPointsTo(hctx, value, fromCtx, from),
+ *  OptArgAssign(toCtx, to, fromCtx, from).
+ *.plan 1:(2,1)
+ **/
+
+BOUND_VAR_POINTS_TO(hctx, value, toCtx, to) :-
+  OptArgVarPointsTo(hctx, value, fromCtx, from),
+  OptArgAssign(toCtx, to, fromCtx, from, allowedType),
+  Value_Type(value, type),
+  basic.SubtypeOf(type, allowedType).
+
+#endif // INFORMATION_FLOW
+
+
+/**
+ * Catch-all Assignments. Use sparingly!
+ */
+
+// No longer using general-purpose inter-procedural assignments for lots
+// of different flows. Souffle cannot optimize well. Best to break up
+// key cases (like arg-return flow, above) into separate, well-optimized rules.
+// OptInterproceduralAssign is never produced in any configuration (the
+// general-purpose interproc assign was split into the well-optimized rules
+// above), so this rule is a no-op. Commented out so the empty, tuple-typed
+// relation is pruned rather than emitted as a tuple-typed EDB input.
+// BOUND_VAR_POINTS_TO(hctx, value, toCtx, to) :-
+//   OptInterproceduralAssign(toCtx, to, fromCtx, from),
+//   VarPointsTo(hctx, value, fromCtx, from).
+//  .plan 1:(2,1)
+//// no plan for now. These kinds of inter-proc assignments should be very few!
+
+
+/**
+ * Virtual Method Invocation
+ */
+
+.decl OptVirtualMethodInvocationBase(invocation:MethodInvocation, base:Var)
+
+OptVirtualMethodInvocationBase(invocation, base) :-
+  Reachable(inmethod),
+  Instruction_Method(invocation, inmethod),
+  VirtualMethodInvocation_Base(invocation, base).
+
+// The optimization/advanced merge treatment is as follows: the main
+// analysis (this file) first creates all the possible bindings that
+// the Merge logic might need to create a new context. (It uses
+// ContextRequest to communicate these bindings to the individual
+// context-sensitive analysis.) Then each individual analysis creates
+// new context objects by employing arbitrary logic, and communicates
+// back to the main analysis the results of context creation using
+// ContextResponse.
+configuration.ContextRequest(callerCtx, hctx, invocation, value, tomethod, 1) :-
+  OptVirtualMethodInvocationBase(invocation, base),
+  VarPointsTo(hctx, value, callerCtx, base),
+  Value_Type(value, valuetype),
+  basic.ResolveInvocation(valuetype, invocation, tomethod).
+
+// The main analysis is merely looking up the previously created
+// context objects.
+#ifdef X_ZIPPER
+
+BOUND_VAR_POINTS_TO(hctx, value, calleeCtx, this) :-
+  configuration.ContextRequest(callerCtx, hctx, invocation, value, tomethod, _),
+  configuration.ContextResponse(callerCtx, hctx, invocation, value, tomethod, calleeCtx),
+  ThisVar(tomethod, this),
+  ZipperPrecisionCriticalMethod(tomethod).
+
+BOUND_VAR_POINTS_TO(hctx, value, immCtx, this) :-
+  configuration.ContextRequest(_, hctx, invocation, value, tomethod, _),
+  isImmutableContext(immCtx),
+  ThisVar(tomethod, this),
+  !ZipperPrecisionCriticalMethod(tomethod).
+
+#else
+
+BOUND_VAR_POINTS_TO(hctx, value, calleeCtx, this) :-
+  configuration.ContextRequest(callerCtx, hctx, invocation, value, tomethod, _),
+  configuration.ContextResponse(callerCtx, hctx, invocation, value, tomethod, calleeCtx),
+  ThisVar(tomethod, this),
+  !Value_Null(value).
+#ifndef X_CONTEXT_REMOVER
+#endif // X_CONTEXT_REMOVER
+
+#endif // X_ZIPPER
+
+/**
+ * Super method invocations
+ */
+
+.decl OptSuperMethodInvocationBase(invocation:MethodInvocation, base:Var)
+
+OptSuperMethodInvocationBase(invocation, base) :-
+  Reachable(inmethod),
+  Instruction_Method(invocation, inmethod),
+  SuperMethodInvocation_Base(invocation, base).
+
+configuration.ContextRequest(callerCtx, hctx, invocation, value, tomethod, 1) :-
+  OptSuperMethodInvocationBase(invocation, base),
+  VarPointsTo(hctx, value, callerCtx, base),
+  MethodInvocation_Method(invocation, tomethod).
+
+/**
+ * Special method invocations
+ */
+
+.decl OptSpecialMethodInvocationBase(invocation:MethodInvocation, base:Var)
+
+OptSpecialMethodInvocationBase(invocation, base) :-
+  Reachable(inmethod),
+  Instruction_Method(invocation, inmethod),
+  SpecialMethodInvocation_Base(invocation, base).
+
+configuration.ContextRequest(callerCtx, hctx, invocation, value, tomethod, 1) :-
+  OptSpecialMethodInvocationBase(invocation, base),
+  VarPointsTo(hctx, value, callerCtx, base),
+  MethodInvocation_Method(invocation, tomethod).
+
+/**
+ * Reachable
+ */
+ReachableContext(ctx, method) :-
+  CallGraphEdge(_, _, ctx, method).
+
+Reachable(method) :-
+  ReachableContext(_, method).
+
+ReachableClass(class) :-
+  mainAnalysis.Reachable(method),
+  Method_DeclaringType(method, class).
+
+.decl AppReachable(method:Method)
+
+AppReachable(method) :-
+  Reachable(method),
+  ApplicationMethod(method).
+
+#ifdef SANITY
+.decl DuplicateContextRequest(callerCtx:configuration.Context, hctx:configuration.HContext, invo:MethodInvocation, obj:Value, meth1:Method, meth2:Method)
+.output DuplicateContextRequest
+
+DuplicateContextRequest(callerCtx, hctx, invo, obj, meth1, meth2) :-
+  configuration.ContextRequest(callerCtx, hctx, invo, obj, meth1, _),
+  configuration.ContextRequest(callerCtx, hctx, invo, obj, meth2, _),
+  meth1 != meth2,
+  !Value_Null(obj),
+#ifdef REFLECTION_DYNAMIC_PROXIES
+  // Exclude invocation handlers. Problematic corner case: invocations x.m()
+  // where m() comes from java.lang.Object and x points to both (a) an
+  // invocation handler <h> and (b) a proxy using <h>. Both context requests use
+  // <h> as the context "value" but the first will resolve the target method to
+  // m() from Object, while the second will pick the invoke() of the handler.
+  Value_Type(obj, objType),
+  !basic.SubtypeOf(objType, "java.lang.reflect.InvocationHandler"),
+#endif // REFLECTION_DYNAMIC_PROXIES
+  // Exclude duplicate method lookup due to covariance.
+  !basic.CovariantMethods(meth1, meth2).
+
+.decl DuplicateContextResponse(callerCtx:configuration.Context, hctx:configuration.HContext, invo:MethodInvocation, obj:Value, calleeCtx1:configuration.Context, calleeCtx2:configuration.Context)
+.output DuplicateContextResponse
+
+DuplicateContextResponse(callerCtx, hctx, invo, obj, calleeCtx1, calleeCtx2) :-
+  configuration.ContextRequest(callerCtx, hctx, invo, obj, tomethod, _),
+  configuration.ContextResponse(callerCtx, hctx, invo, obj, tomethod, calleeCtx1),
+  configuration.ContextResponse(callerCtx, hctx, invo, obj, tomethod, calleeCtx2),
+  calleeCtx1 != calleeCtx2.
+
+#endif // SANITY
+
+// Reachable methods should make their annotations reachable.
+
+.decl ReachableAnnotationMethod(method:Method, annotation:Annotation)
+
+ReachableAnnotationMethod(annotMethod, annotation) :-
+  ReachableContext(_, method),
+  Method_Annotation(method, annotation),
+  Method_DeclaringType(annotMethod, annotation).
+// Annotation methods are abstract, so we don't mock the receiver or the parameters.
+ReachableContext(ctx0, annotMethod) :-
+  ReachableAnnotationMethod(annotMethod, _),
+  isImmutableContext(ctx0).
+
+#ifdef DISABLE_POINTS_TO
+MockValueConsMacro(value, annotation),
+ReachableValue(hctx, value) :-
+  ReachableAnnotationMethod(_, annotation),
+  isImmutableHContext(hctx),
+  value = cat("<Annotation ", cat(annotation, ">")).
+#endif // DISABLE_POINTS_TO
+
+#ifdef ANDROID
+// Constant integer values, used on Android to find component ids.
+Value_Num(constValue, n, type),
+isValue(constValue),
+Value_Type(constValue, type),
+Value_DeclaringType(constValue, declaringType) :-
+  CreateIntValue(n, type, declaringType),
+  Type_int(type),
+  constValue = NUM_CONSTANT(n).
+#endif // ANDROID
+
+#ifndef DISABLE_POINTS_TO
+// Core mocking rule.
+MockValueConsMacro(value, type),
+BOUND_VAR_POINTS_TO(hctx, value, ctx, return) :-
+  Instruction_Method(invocation, inmethod),
+  ReachableContext(ctx, inmethod),
+  MethodInvocation_Method(invocation, method),
+  MockedMethodReturns(method, value, type),
+  AssignReturnValue(invocation, return),
+  isImmutableHContext(hctx).
+#endif // DISABLE_POINTS_TO

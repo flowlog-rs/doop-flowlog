@@ -1,0 +1,128 @@
+/**
+ * TODO: Implicitly thrown exceptions are not included
+ */
+
+/**
+ * Represents the exceptions a method can throw
+ */
+#ifndef DISABLE_POINTS_TO
+.decl Instruction_Throws(hctx:configuration.HContext, value:Value, ctx:configuration.Context, insn:Instruction)
+.decl ThrowPointsTo(hctx:configuration.HContext, value:Value, ctx:configuration.Context, method:Method)
+
+Instruction_Throws(hctx, value, ctx, insn) :-
+  Throw(insn, var),
+  VarPointsTo(hctx, value, ctx, var).
+
+Instruction_Throws(hctx, value, callerCtx, invocation) :-
+  ThrowPointsTo(hctx, value, calleeCtx, tomethod),
+  CallGraphEdge(callerCtx, invocation, calleeCtx, tomethod).
+
+/**
+ * Represents the exceptions a method can throw
+ * TODO Implicitly thrown exceptions are not included
+ */
+ThrowPointsTo(hctx, value, ctx, method) :-
+  Instruction_Throws(hctx, value, ctx, insn),
+  Instruction_Method(insn, method),
+  !basic.ExceptionHandler_InRange(_, insn).
+
+ThrowPointsTo(hctx, value, ctx, method) :-
+  Instruction_Throws(hctx, value, ctx, insn),
+  Value_Type(value, valueType),
+  Instruction_Method(insn, method),
+  basic.ExceptionHandler_SameInsn_Repr(insn, repr),
+  basic.ExceptionHandler_SameBlock_Repr(repr, block),
+  !basic.ExceptionHandler_TypeIsCaught(valueType, block).
+//// Certainly Value_Type is now part of the main SCC for much more
+//// than info-flow. Still, might this fail for some settings?
+//#ifdef INFORMATION_FLOW
+//#endif
+
+VarPointsTo(hctx, value, ctx, param) :-
+  Instruction_Throws(hctx, value, ctx, insn),
+  Value_Type(value, valueType),
+  basic.ExceptionHandler_InRange(handler, insn),
+  ExceptionHandler_Type(handler, handlerType),
+  basic.SubtypeOf(valueType, handlerType),
+  ConcreteClass(valueType), // filtering null_type
+  ExceptionHandler_FormalParam(handler, param),
+  !basic.ExceptionHandler_Impossible(valueType, handler, insn).
+//// See previous rule
+//#ifdef INFORMATION_FLOW
+//#endif
+#endif // DISABLE_POINTS_TO
+
+#ifdef REFLECTION_DYNAMIC_PROXIES
+// Dynamic proxies have some special exception semantics, since the
+// single invoke() method must pose as any method and thus is declared
+// to throw a Throwable.
+
+// Case (a): If invoke() has to throw an exception e that is not a
+// checked exception of the interface method, then e is wrapped as
+// UndeclaredThrowableException(e) and thrown. The actual rule below
+// is a bit simpler than the spec, as we do not provide the inner
+// exception e, so we use a global exception object.
+
+#define UTE_Class "java.lang.reflect.UndeclaredThrowableException"
+#define UTE_ProxyValue "<UndeclaredThrowableException thrown by proxy call>"
+.decl isProxyUTE(value:Value)
+
+MockValueConsMacro(UTE_ProxyValue, UTE_Class), isProxyUTE(UTE_ProxyValue) :-
+  isType(UTE_Class).
+
+Instruction_Throws(hctx, UTE_ProxyValue, callerCtx, invo) :-
+  ProxyCallGraphEdge(callerCtx, invo, _, _),
+  isProxyUTE(UTE_ProxyValue),
+  isImmutableHContext(hctx).
+
+// Case (b): "If the value returned by invoke is null and the
+// interface method's return type is primitive, then a
+// NullPointerException will be thrown by the method invocation on the
+// proxy instance." For performance, we use a single global
+// object.
+
+#define NPE_Class "java.lang.NullPointerException"
+#define NPE_ProxyValue "<NullPointerException thrown by proxy call>"
+.decl isProxyNPE(value:Value)
+
+MockValueConsMacro(NPE_ProxyValue, NPE_Class), isProxyNPE(NPE_ProxyValue) :-
+  isType(NPE_Class).
+
+.decl ProxyNullInvokeResult(callerCtx:configuration.Context, invo:MethodInvocation, calleeCtx:configuration.Context)
+
+ProxyNullInvokeResult(callerCtx, invo, calleeCtx) :-
+  ProxyInvokeResult(callerCtx, invo, calleeCtx, handlerReturnVar),
+  VarPointsTo(_, null, _, handlerReturnVar),
+  Value_Null(null).
+
+Instruction_Throws(hctx, NPE_ProxyValue, callerCtx, invo) :-
+  ProxyNullInvokeResult(callerCtx, invo, _),
+  AssignReturnValue(invo, return),
+  Var_Type(return, returnType),
+  isPrimitiveType(returnType),
+  isProxyNPE(NPE_ProxyValue),
+  isImmutableHContext(hctx).
+
+// Case (c): "If the value returned by invoke is otherwise not compatible
+// with the method's declared return type as described above, a
+// ClassCastException will be thrown by the proxy instance." If invoke()
+// returns B and the interface method returns A, then A and B are not
+// compatible if (a) they are different primitive types or (b) B is not a
+// subtype of A. In practice, this is usually due to the variety of return
+// types appearing in interface methods, so we can assume that proxy calls
+// may always throw ClassCastException and we use a single object for all
+// such exceptions.
+
+#define CCE_Class "java.lang.ClassCastException"
+#define CCE_ProxyValue "<ClassCastException thrown by proxy call>"
+.decl isProxyCCE(value:Value)
+
+MockValueConsMacro(CCE_ProxyValue, CCE_Class), isProxyCCE(CCE_ProxyValue) :-
+  isType(CCE_Class).
+
+Instruction_Throws(hctx, CCE_ProxyValue, callerCtx, invo) :-
+  ProxyCallGraphEdge(callerCtx, invo, _, _),
+  isProxyCCE(CCE_ProxyValue),
+  isImmutableHContext(hctx).
+
+#endif // REFLECTION_DYNAMIC_PROXIES

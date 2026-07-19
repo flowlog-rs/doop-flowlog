@@ -1,0 +1,64 @@
+// A cross-product of method name candidates and method signature candidates.
+.decl PossibleNativeCodeTargetMethod(method:Method, function:symbol, file:symbol)
+
+// Pair all strings (or only strings in known functions in precise mode).
+PossibleNativeCodeTargetMethod(method, function, file) :-
+  _NativeMethodTypeCandidate(file, function, descriptor, _),
+  _NativeNameCandidate(file, function, name, _),
+#ifdef ONLY_PRECISE_NATIVE_STRINGS
+  function != "-",
+#endif // ONLY_PRECISE_NATIVE_STRINGS
+  Method_SimpleName(method, name),
+  Method_JVMDescriptor(method, descriptor).
+
+// The distance between string xrefs in the code. This should be big
+// enough to catch strings used together in major calling conventions.
+#define XREF_DISTANCE 15
+
+// If xref information exists, pair strings that are referenced together in code.
+PossibleNativeCodeTargetMethod(method, "<<UNKNOWN>>", file) :-
+  _NativeMethodTypeCandidate(file, function, descriptor, _),
+  _NativeNameCandidate(file, function, name, _),
+  _NativeXRef(descriptor, file, _, descriptorRefAddr),
+  _NativeXRef(name, file, _, nameRefAddr),
+  Method_SimpleName(method, name),
+  Method_JVMDescriptor(method, descriptor),
+  (nameRefAddr - descriptorRefAddr) <= XREF_DISTANCE,
+  (descriptorRefAddr - nameRefAddr) <= XREF_DISTANCE.
+
+.decl PossibleNativeCodeTargetMethodLocalized(method:Method, function:symbol, file:symbol)
+
+PossibleNativeCodeTargetMethodLocalized(method, function, file) :-
+  PossibleNativeCodeTargetMethod(method, function, file),
+  function != "-".
+
+.decl OverloadedJNIMethod(javaMethod:Method, type:ReferenceType, name:symbol, descriptor:symbol)
+
+OverloadedJNIMethod(javaMethod, type, name, descriptor) :-
+  Method_Modifier("native", javaMethod),
+  Method_SimpleName(javaMethod, name),
+  Method_Descriptor(javaMethod, descriptor),
+  Method_DeclaringType(javaMethod, type),
+  MethodLookup(name, _, type, method1),
+  MethodLookup(name, _, type, method2),
+  method1 != method2.
+
+// A mapping between a native Java method and a JNI function. This
+// does not capture the case of using the runtime's RegisterNatives()
+// function to register native functions with arbitrary names. For
+// example, the "crazy linker" used on Android, registers native
+// methods: https://chromium.googlesource.com/chromium/src/+/master/docs/android_native_libraries.md
+.decl JNIMethod_NativeId(javaMethod:Method, nativeId:symbol)
+
+// Non-overloaded native method (default, always generated).
+JNIMethod_NativeId(javaMethod, nativeId) :-
+  _NativeMethodId(javaMethod, nativeId),
+  isMethod(javaMethod).
+
+// Overloaded native method, use computed name as prefix (see JNI spec).
+JNIMethod_NativeId(javaMethod, nativeId) :-
+  OverloadedJNIMethod(javaMethod, _, _, descriptor),
+  _NativeMethodId(javaMethod, nativeIdBase),
+  nativeId = cat(nativeIdBase, cat("__", descriptor)).
+
+

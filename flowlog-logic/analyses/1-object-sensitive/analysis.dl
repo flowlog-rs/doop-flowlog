@@ -1,0 +1,58 @@
+// Context-sensitive pointer analysis with context of 1 object.
+
+#include "../../main/single-phase-analysis.dl"
+#include "../../main/configuration.dl"
+
+.comp OneObjectSensitiveConfiguration : AbstractConfiguration {
+
+// In this analysis, the real context is a Value.
+.type Context = ( value:Value )
+
+// This analysis has no context for heap objects.
+// This is emulated by creating a single HContext object,
+// which is used everywhere.
+.type HContext = symbol
+
+// This analysis treats arrays specially (deeper context).
+// Only used for arrays. Maps each context to a *potential* hcontext.
+.decl ContextToHContext(ctx:Context, hctx:HContext)
+
+  ContextResponse(callerCtx, hctx, invo, value, tomethod, calleeCtx) :-
+    ContextRequest(callerCtx, hctx, invo, value, tomethod, _),
+    calleeCtx = (value,).
+
+  StaticContextResponse(callerCtx, invo, calleeCtx) :-
+    StaticContextRequest(callerCtx, invo),
+    calleeCtx = callerCtx.
+
+  ContextToHContext(ctx, cat("<<constructed-hctx-", cat(value, ">>"))) :-
+    isContext(ctx),
+    ctx = (value,).
+
+// Do not indent: this breaks some cpp versions.
+#define UNIQUE_HCONTEXT "<<unique-hcontext>>"
+
+  RecordContextResponse(ctx, value, var, hctx) :-
+    RecordContextRequest(ctx, value, var),      
+    hctx = UNIQUE_HCONTEXT.
+
+  InitContextResponse(value, ctx) :-
+    InitContextRequest(value),
+    ctx = (value,).
+
+  InitHContextResponse(s, hctx) :-
+    InitHContextRequest(s),
+    hctx = UNIQUE_HCONTEXT.
+
+#ifdef HEAPDLS
+  DynamicContextToContext((value,), dynCtx) :-
+    Value_byDynamicHeap(heap1, value),
+    DynamicContextHeap1(heap1, dynCtx).
+
+  DynamicContextToContext(ctx, dynCtx) :-
+    isDynamicContext(dynCtx),
+    !DynamicContextHeap1(_, dynCtx),
+    isImmutableContext(ctx).
+#endif // HEAPDLS
+
+}

@@ -1,0 +1,64 @@
+// Context-sensitive pointer analysis with context of One call site.
+
+#include "../../main/single-phase-analysis.dl"
+#include "../../main/configuration.dl"
+
+#define UNIQUE_HCONTEXT "<<unique-hcontext>>"
+
+.comp OneCallSiteSensitiveConfiguration : AbstractConfiguration {
+
+  // In this analysis, the real context is a MethodInvocation.
+  .type Context = ( invocation:MethodInvocation )
+
+  // This analysis has no context for heap objects.
+  // This is emulated by creating a single HContext object,
+  // which is used everywhere.
+  .type HContext = symbol
+
+  ContextResponse(callerCtx, hctx, invo, value, tomethod, calleeCtx) :-
+    ContextRequest(callerCtx, hctx, invo, value, tomethod, _),
+    calleeCtx = (invo,).
+
+  StaticContextResponse(callerCtx, invo, calleeCtx) :-
+    StaticContextRequest(callerCtx, invo),
+    calleeCtx = (invo,).
+
+  RecordContextResponse(ctx, value, var, hctx) :-
+  RecordContextRequest(ctx, value, var),      
+    hctx = UNIQUE_HCONTEXT.
+
+  InitContextResponse(invocation, ctx) :-
+    InitContextRequest(invocation),
+    ctx = (invocation,).
+
+  InitHContextResponse(s, hctx) :-
+    InitHContextRequest(s),
+    hctx = UNIQUE_HCONTEXT.
+
+  .decl StartupInvocation(invocation:MethodInvocation)
+
+  StartupInvocation("<<jvm-startup-context>>").
+
+  /**
+   * Special calling contexts
+   */
+
+  // PlusMethodInvocation macro should be used here.
+  // However, it is not as souffle reports syntax error
+  // if we try to assert two facts at once, e.g.,
+  // isInstuction("foo"), isMethodInvocation("foo").
+  isInstruction("<<initial-context>>").
+  isMethodInvocation("<<initial-context>>").
+
+  isInstruction("<<jvm-startup-context>>").
+  isMethodInvocation("<<jvm-startup-context>>").
+
+  isInstruction("<<jvm-startup-hcontext>>").
+  isMethodInvocation("<<jvm-startup-hcontext>>").
+
+  isInstruction("<<clinit-context>>").
+  isMethodInvocation("<<clinit-context>>").
+
+  isInstruction("<<immutable-context>>").
+  isMethodInvocation("<<immutable-context>>").
+}

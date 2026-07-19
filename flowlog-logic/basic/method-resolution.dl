@@ -1,0 +1,63 @@
+/**
+ * Encodes a CHA callgraph, effectively
+ */
+.decl ResolveInvocation(type:Type, invocation:MethodInvocation, tomethod:Method)
+//.output ResolveInvocation
+
+// Auxiliary
+.decl VirtualMethodInvocation_BaseType(invocation:MethodInvocation, type:Type)
+VirtualMethodInvocation_BaseType(invocation, basetype) :-
+    VirtualMethodInvocation_Base(invocation, base),
+    Var_Type(base, basetype).
+
+ResolveInvocation(type, invocation, tomethod) :-
+    VirtualMethodInvocation_SimpleName(invocation, simplename),
+    VirtualMethodInvocation_Descriptor(invocation, descriptor),
+    VirtualMethodInvocation_BaseType(invocation, basetype),
+    SubtypeOf(type, basetype),
+    MethodLookup(simplename, descriptor, type, tomethod).
+
+ResolveInvocation(basetype, invocation, tomethod) :-
+    SuperMethodInvocation_SimpleName(invocation, simplename),
+    SuperMethodInvocation_Descriptor(invocation, descriptor),
+    SuperMethodInvocation_Base(invocation, base),
+    Var_Type(base, basetype),
+    DirectSuperclass(basetype, supertype),
+    MethodLookup(simplename, descriptor, supertype, tomethod).
+
+
+.decl ConcreteMethodDeclared(meth:Method, class:ClassType)
+ConcreteMethodDeclared(meth, class) :-
+  isClassType(class),
+  Method_DeclaringType(meth, class),
+  !Method_Modifier("abstract", meth).
+
+.decl MethodDeclaredOrInherited(meth:Method, class:ReferenceType)
+MethodDeclaredOrInherited(meth, class) :-
+//  isClassType(class),
+  Method_DeclaringType(meth, class).
+
+// This keeps the superclass signature of the method. Does not guarantee
+// there is a concrete implementation until we do "MethodLookup".
+MethodDeclaredOrInherited(meth, class) :-
+  MethodDeclaredOrInherited(meth, superClass),
+  DirectSuperclass(class, superClass).
+
+// Inherit default methods from interfaces.
+MethodDeclaredOrInherited(meth, class) :-
+  MethodDeclaredOrInherited(meth, superInterface),
+  !Method_Modifier("abstract", meth),
+  DirectSuperinterface(class, superInterface).
+
+// REVIEW: a little wasteful, but guessing it doesn't matter.
+.decl MethodsOfSameOrSuperType(method1:Method, method2:Method)
+MethodsOfSameOrSuperType(method1, method2) :-
+  MethodDeclaredOrInherited(method1, class),
+  MethodDeclaredOrInherited(method2, class).
+
+.decl MethodsOfSameNonSDKType(method1:Method, method2:Method, class:Type)
+MethodsOfSameNonSDKType(method1, method2, class) :-
+  Method_DeclaringType(method1, class),
+  !match("java.*", class),
+  !match("sun.*", class),
+  Method_DeclaringType(method2, class).
