@@ -2,6 +2,15 @@
 
 # Doop - Framework for Java Pointer and Taint Analysis (using P/Taint)
 
+> **FlowLog port (this fork).** [`flowlog-logic/`](flowlog-logic) mirrors the
+> core points-to pipeline of `souffle-logic/` on the
+> [FlowLog](https://github.com/flowlog-rs/flowlog) engine: 24 analysis families
+> run end-to-end, 19 verified **byte-exact** against Soufflé, and FlowLog is
+> faster on 16/19 of those single-threaded.
+> What changed in the Datalog (~2% of lines, 6 mechanical categories):
+> [`flowlog-logic/README.md`](flowlog-logic/README.md). How to build, run, and
+> compare both engines with one script: [`verify/`](verify).
+
 This document contains instructions for invoking the main driver of Doop.
 
 * For an introduction to Datalog, please consult [Datalog-101](docs/datalog-101-legacy.md).
