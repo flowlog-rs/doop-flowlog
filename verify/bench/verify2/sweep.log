@@ -1,0 +1,22 @@
+[04:45:34] time START  families=10 datasets=luindex  -w32/-j32 REPS=3  -> /home/azureuser/bench-results/time_flowlog-west2.tsv
+[04:53:56] context-insensitive built  fl=209s sfnp=141s sfpl=153s
+[04:57:48] context-insensitive @ luindex  fl=14s sfnp=37s sfpl=26s  COUNT_MATCH
+[05:06:50] 1-type-sensitive built  fl=235s sfnp=152s sfpl=154s
+[05:13:16] 1-type-sensitive @ luindex  fl=17s sfnp=71s sfpl=40s  COUNT_MATCH
+[05:22:19] 1-type-sensitive+heap built  fl=239s sfnp=151s sfpl=154s
+[05:30:59] 1-type-sensitive+heap @ luindex  fl=28s sfnp=87s sfpl=59s  COUNT_MATCH
+[05:39:47] 1-call-site-sensitive built  fl=234s sfnp=142s sfpl=152s
+[05:48:56] 1-call-site-sensitive @ luindex  fl=20s sfnp=105s sfpl=58s  COUNT_MATCH
+[05:57:46] 1-call-site-sensitive+heap built  fl=236s sfnp=142s sfpl=153s
+[06:07:08] 1-call-site-sensitive+heap @ luindex  fl=20s sfnp=107s sfpl=60s  COUNT_MATCH
+[06:15:54] 1-object-sensitive built  fl=233s sfnp=140s sfpl=153s
+[06:28:43] 1-object-sensitive @ luindex  fl=25s sfnp=165s sfpl=66s  COUNT_MATCH
+[06:37:33] 1-object-sensitive+heap built  fl=236s sfnp=142s sfpl=152s
+[06:53:37] 1-object-sensitive+heap @ luindex  fl=45s sfnp=175s sfpl=100s  COUNT_MATCH
+[07:02:53] 1-object-1-type-sensitive+heap built  fl=252s sfnp=151s sfpl=153s
+[07:12:53] 1-object-1-type-sensitive+heap @ luindex  fl=33s sfnp=99s sfpl=68s  COUNT_MATCH
+[07:22:07] 2-type-sensitive+heap built  fl=250s sfnp=151s sfpl=154s
+[07:26:38] 2-type-sensitive+heap @ luindex  fl=16s sfnp=44s sfpl=30s  COUNT_MATCH
+[07:35:39] 2-object-sensitive+heap built  fl=248s sfnp=142s sfpl=151s
+[07:47:05] 2-object-sensitive+heap @ luindex  fl=40s sfnp=108s sfpl=81s  COUNT_MATCH
+[07:47:05] time DONE -> /home/azureuser/bench-results/time_flowlog-west2.tsv
