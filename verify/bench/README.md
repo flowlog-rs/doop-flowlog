@@ -42,6 +42,11 @@ FLC=… FACTS_ROOT=… verify/bench/output.sh 1-object-sensitive+heap
 
 Results go to `time_<host>.tsv` / `output_<host>.tsv` in `$OUTDIR`.
 
+Recorded write-ups live in their own dir under `verify/bench/`, e.g.
+[`verify2/`](verify2) — a three-engine timing sweep (FlowLog `main-next`
+`ef3be32` vs Soufflé ±`.plan`, 10 families × luindex, `-w32`/`-j32`,
+`.printsize`): 10/10 `COUNT_MATCH`, FlowLog runs 2.6–6.6× faster.
+
 **`time_*.tsv` columns**: `dataset, family`, then per engine (`fl`, `sfnp` =
 Soufflé no-plan, `sfpl` = Soufflé with-plan) `build_s, build_rss(MB), run_s,
 run_rss(MB), vpt`(VarPointsTo count), then `verdict` (`COUNT_MATCH` /
