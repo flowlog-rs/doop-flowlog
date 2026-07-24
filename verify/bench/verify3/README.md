@@ -1,15 +1,26 @@
-# [verify3] FlowLog vs Soufflé — timing sweep
+# [verify3] FlowLog vs Soufflé — timing sweep (COMPLETE)
 
 Results of `verify/bench/time.sh` comparing three engines on DOOP points-to
 analyses, timed with `.printsize` (tuple count only — **no IDB/CSV
-serialization**, so the number is pure fixpoint compute).
+serialization**, so the number is pure fixpoint compute). Full 24-family x
+6-dataset sweep, 32 threads. Ran 2026-07-20 → 2026-07-24 (~106 h wall-clock).
 
-> **Status: in-progress snapshot — 14 of 24 families complete.** 64 of 84 cells
-> `COUNT_MATCH`. Of the 20 `RUN_FAIL` cells, **17 are Soufflé-only — FlowLog
-> completed them** — and only **3 defeat every engine** (`2-call-site-sensitive+heap`
-> on the three largest apps, the family DOOP documents as intractable in
-> <=~220 GB on *both* engines). The remaining tail (2-call-site+2-heap, 3-object/type,
-> 4-object, adaptive/sticky/selective/partitioned) is still running.
+## Headline — cells completed (of 144) and correctness
+
+| engine | cells completed | notes |
+|---|--:|---|
+| **FlowLog** | **127 / 144** | most cells of any engine |
+| Soufflé **+plan** | 118 / 144 | DOOP hand-tuned join orders |
+| Soufflé **no-plan** | 98 / 144 | correctness oracle |
+
+- **98 `COUNT_MATCH`, 46 `RUN_FAIL`.** Every one of the 98 comparable cells
+  agrees on VarPointsTo — **no `COUNT_DIFF`**.
+- Of the 46 `RUN_FAIL`: **29 are Soufflé-only** (FlowLog finished; Soufflé hit
+  `RUN_TO=1800 s` / `MEM_MAX=450G`) and **17 defeat every engine** (both need
+  >450 GB): `2-call-site-sensitive+heap/+2-heap` (batik/h2o/spring),
+  `4-object-sensitive+4-heap` (batik/h2o), `selective-2-object-sensitive+heap`
+  (eclipse/batik/spring), and **`sticky-2-object-sensitive` on all 6 datasets**
+  (blows up even on luindex, for all three engines).
 
 ## Engines
 
@@ -46,7 +57,7 @@ an engine did not finish within the guards.
 
 ## Compile time & RSS (once per family)
 
-| family | fl build s | fl MB | sf-noplan build s | MB | sf-plan build s | MB |
+| family | fl build s | fl MB | sf-noplan s | MB | sf-plan s | MB |
 |---|--:|--:|--:|--:|--:|--:|
 | `context-insensitive` | 204 | 7,008 | 145 | 2,279 | 152 | 2,267 |
 | `1-type-sensitive` | 243 | 9,261 | 153 | 2,267 | 154 | 2,273 |
@@ -62,8 +73,18 @@ an engine did not finish within the guards.
 | `2-object-sensitive+heap` | 259 | 10,838 | 140 | 2,261 | 156 | 2,277 |
 | `2-object-sensitive+2-heap` | 241 | 9,210 | 142 | 2,243 | 158 | 2,283 |
 | `2-call-site-sensitive+heap` | 261 | 10,888 | 142 | 2,262 | 152 | 2,276 |
+| `2-call-site-sensitive+2-heap` | 246 | 9,419 | 139 | 2,252 | 149 | 2,279 |
+| `3-type-sensitive+2-heap` | 265 | 10,883 | 149 | 2,215 | 154 | 2,269 |
+| `3-type-sensitive+3-heap` | 236 | 9,963 | 151 | 2,172 | 154 | 2,272 |
+| `3-object-sensitive+2-heap` | 259 | 11,003 | 144 | 2,259 | 153 | 2,274 |
+| `3-object-sensitive+3-heap` | 235 | 9,780 | 142 | 2,242 | 152 | 2,288 |
+| `4-object-sensitive+4-heap` | 235 | 9,391 | 141 | 2,278 | 153 | 2,286 |
+| `adaptive-2-object-sensitive+heap` | 275 | 10,806 | 159 | 2,270 | 159 | 2,241 |
+| `sticky-2-object-sensitive` | 264 | 11,145 | 149 | 2,267 | 153 | 2,265 |
+| `selective-2-object-sensitive+heap` | 261 | 10,866 | 144 | 2,261 | 167 | 2,274 |
+| `partitioned-2-object-sensitive+heap` | 263 | 10,728 | 154 | 2,189 | 161 | 2,240 |
 
-## Run time & RSS (per dataset x family, 32 threads, `.printsize`; run s + fl RSS MB)
+## Run time & RSS (all 144 cells; run s + FlowLog RSS MB)
 
 | dataset | family | fl run s | fl MB | sf-np run s | sf-pl run s | VarPointsTo | verdict |
 |---|---|--:|--:|--:|--:|--:|:--|
@@ -151,16 +172,68 @@ an engine did not finish within the guards.
 | h2o | `2-call-site-sensitive+heap` | FAIL | NA | FAIL | FAIL | NA | RUN_FAIL |
 | xalan | `2-call-site-sensitive+heap` | 485 | 395,050 | FAIL | FAIL | 69,385,705 | RUN_FAIL |
 | spring | `2-call-site-sensitive+heap` | FAIL | NA | FAIL | FAIL | NA | RUN_FAIL |
+| luindex | `2-call-site-sensitive+2-heap` | 503 | 365,515 | FAIL | FAIL | 96,400,740 | RUN_FAIL |
+| eclipse | `2-call-site-sensitive+2-heap` | 946 | 429,461 | FAIL | FAIL | 630,749,236 | RUN_FAIL |
+| batik | `2-call-site-sensitive+2-heap` | FAIL | NA | FAIL | FAIL | NA | RUN_FAIL |
+| h2o | `2-call-site-sensitive+2-heap` | FAIL | NA | FAIL | FAIL | NA | RUN_FAIL |
+| xalan | `2-call-site-sensitive+2-heap` | 509 | 426,670 | FAIL | FAIL | 74,403,511 | RUN_FAIL |
+| spring | `2-call-site-sensitive+2-heap` | FAIL | NA | FAIL | FAIL | NA | RUN_FAIL |
+| luindex | `3-type-sensitive+2-heap` | 13 | 3,643 | 26 | 18 | 1,483,057 | COUNT_MATCH |
+| eclipse | `3-type-sensitive+2-heap` | 16 | 4,919 | 59 | 30 | 4,443,710 | COUNT_MATCH |
+| batik | `3-type-sensitive+2-heap` | 121 | 49,834 | 1709 | 411 | 73,431,803 | COUNT_MATCH |
+| h2o | `3-type-sensitive+2-heap` | 97 | 25,163 | 289 | 209 | 12,770,977 | COUNT_MATCH |
+| xalan | `3-type-sensitive+2-heap` | 17 | 3,775 | 29 | 23 | 1,023,686 | COUNT_MATCH |
+| spring | `3-type-sensitive+2-heap` | 31 | 10,807 | 201 | 80 | 17,818,600 | COUNT_MATCH |
+| luindex | `3-type-sensitive+3-heap` | 13 | 3,762 | 26 | 18 | 1,484,975 | COUNT_MATCH |
+| eclipse | `3-type-sensitive+3-heap` | 17 | 5,284 | 61 | 31 | 4,598,065 | COUNT_MATCH |
+| batik | `3-type-sensitive+3-heap` | 171 | 68,828 | FAIL | 577 | 100,715,696 | RUN_FAIL |
+| h2o | `3-type-sensitive+3-heap` | 126 | 46,460 | 636 | 342 | 61,041,037 | COUNT_MATCH |
+| xalan | `3-type-sensitive+3-heap` | 17 | 3,896 | 29 | 24 | 1,023,924 | COUNT_MATCH |
+| spring | `3-type-sensitive+3-heap` | 32 | 11,812 | 202 | 81 | 17,802,752 | COUNT_MATCH |
+| luindex | `3-object-sensitive+2-heap` | 15 | 5,275 | 53 | 29 | 3,411,656 | COUNT_MATCH |
+| eclipse | `3-object-sensitive+2-heap` | 20 | 7,244 | 106 | 48 | 7,352,446 | COUNT_MATCH |
+| batik | `3-object-sensitive+2-heap` | 368 | 150,345 | FAIL | 1557 | 232,114,515 | RUN_FAIL |
+| h2o | `3-object-sensitive+2-heap` | 121 | 42,970 | 520 | 327 | 44,559,183 | COUNT_MATCH |
+| xalan | `3-object-sensitive+2-heap` | 18 | 4,644 | 41 | 30 | 2,102,955 | COUNT_MATCH |
+| spring | `3-object-sensitive+2-heap` | 40 | 16,743 | 331 | 122 | 25,453,778 | COUNT_MATCH |
+| luindex | `3-object-sensitive+3-heap` | 15 | 5,463 | 53 | 29 | 3,417,156 | COUNT_MATCH |
+| eclipse | `3-object-sensitive+3-heap` | 21 | 8,034 | 113 | 51 | 8,127,441 | COUNT_MATCH |
+| batik | `3-object-sensitive+3-heap` | 380 | 166,206 | FAIL | 1659 | 281,567,358 | RUN_FAIL |
+| h2o | `3-object-sensitive+3-heap` | 294 | 148,119 | FAIL | 1130 | 331,231,535 | RUN_FAIL |
+| xalan | `3-object-sensitive+3-heap` | 18 | 4,796 | 42 | 30 | 2,103,378 | COUNT_MATCH |
+| spring | `3-object-sensitive+3-heap` | 39 | 18,363 | 331 | 124 | 25,429,005 | COUNT_MATCH |
+| luindex | `4-object-sensitive+4-heap` | 15 | 5,844 | 52 | 28 | 3,212,708 | COUNT_MATCH |
+| eclipse | `4-object-sensitive+4-heap` | 21 | 8,955 | 110 | 49 | 7,486,106 | COUNT_MATCH |
+| batik | `4-object-sensitive+4-heap` | FAIL | NA | FAIL | FAIL | NA | RUN_FAIL |
+| h2o | `4-object-sensitive+4-heap` | FAIL | NA | FAIL | FAIL | NA | RUN_FAIL |
+| xalan | `4-object-sensitive+4-heap` | 19 | 5,178 | 41 | 30 | 2,068,256 | COUNT_MATCH |
+| spring | `4-object-sensitive+4-heap` | 35 | 16,433 | 258 | 99 | 18,075,486 | COUNT_MATCH |
+| luindex | `adaptive-2-object-sensitive+heap` | 40 | 8,030 | 108 | 81 | 8,741,742 | COUNT_MATCH |
+| eclipse | `adaptive-2-object-sensitive+heap` | 104 | 19,557 | 592 | 257 | 43,929,737 | COUNT_MATCH |
+| batik | `adaptive-2-object-sensitive+heap` | 188 | 64,297 | FAIL | 806 | 124,016,468 | RUN_FAIL |
+| h2o | `adaptive-2-object-sensitive+heap` | 181 | 30,390 | 431 | 415 | 23,947,405 | COUNT_MATCH |
+| xalan | `adaptive-2-object-sensitive+heap` | 37 | 7,121 | 72 | 65 | 4,316,079 | COUNT_MATCH |
+| spring | `adaptive-2-object-sensitive+heap` | 481 | 58,973 | FAIL | 1744 | 160,369,838 | RUN_FAIL |
+| luindex | `sticky-2-object-sensitive` | FAIL | NA | FAIL | FAIL | NA | RUN_FAIL |
+| eclipse | `sticky-2-object-sensitive` | FAIL | NA | FAIL | FAIL | NA | RUN_FAIL |
+| batik | `sticky-2-object-sensitive` | FAIL | NA | FAIL | FAIL | NA | RUN_FAIL |
+| h2o | `sticky-2-object-sensitive` | FAIL | NA | FAIL | FAIL | NA | RUN_FAIL |
+| xalan | `sticky-2-object-sensitive` | FAIL | NA | FAIL | FAIL | NA | RUN_FAIL |
+| spring | `sticky-2-object-sensitive` | FAIL | NA | FAIL | FAIL | NA | RUN_FAIL |
+| luindex | `selective-2-object-sensitive+heap` | 630 | 43,586 | 1226 | 1402 | 67,307,913 | COUNT_MATCH |
+| eclipse | `selective-2-object-sensitive+heap` | FAIL | NA | FAIL | FAIL | NA | RUN_FAIL |
+| batik | `selective-2-object-sensitive+heap` | FAIL | NA | FAIL | FAIL | NA | RUN_FAIL |
+| h2o | `selective-2-object-sensitive+heap` | 904 | 78,226 | FAIL | FAIL | 118,010,630 | RUN_FAIL |
+| xalan | `selective-2-object-sensitive+heap` | 248 | 23,062 | 362 | 437 | 29,929,512 | COUNT_MATCH |
+| spring | `selective-2-object-sensitive+heap` | FAIL | NA | FAIL | FAIL | NA | RUN_FAIL |
+| luindex | `partitioned-2-object-sensitive+heap` | 41 | 7,938 | 109 | 83 | 8,730,757 | COUNT_MATCH |
+| eclipse | `partitioned-2-object-sensitive+heap` | 107 | 19,165 | 601 | 253 | 43,736,895 | COUNT_MATCH |
+| batik | `partitioned-2-object-sensitive+heap` | 194 | 64,292 | FAIL | 797 | 123,924,261 | RUN_FAIL |
+| h2o | `partitioned-2-object-sensitive+heap` | 180 | 30,546 | 427 | 410 | 23,930,185 | COUNT_MATCH |
+| xalan | `partitioned-2-object-sensitive+heap` | 37 | 7,063 | 71 | 65 | 4,307,599 | COUNT_MATCH |
+| spring | `partitioned-2-object-sensitive+heap` | 476 | 59,102 | FAIL | 1636 | 159,146,742 | RUN_FAIL |
 
-## Failures (20 cells)
-
-| category | count | meaning |
-|---|--:|---|
-| Soufflé-only | 17 | FlowLog finished; Soufflé (no-plan, occ. with-plan) hit `RUN_TO=1800 s` / `MEM_MAX=450G` on the largest apps (batik, spring, h2o). |
-| all engines | 3 | `2-call-site-sensitive+heap @ {batik, h2o, spring}` — intractable in <=~220 GB on **both** engines (DOOP-documented). |
-
-FlowLog completes **17 of 20** cells that Soufflé cannot; the only cells FlowLog
-misses are the 3 all-engine-intractable ones.
+## Failures (46 cells) — FlowLog completes 29 of them
 
 | dataset | family | FlowLog | Soufflé no-plan | Soufflé +plan |
 |---|---|:--|:--|:--|
@@ -184,17 +257,46 @@ misses are the 3 all-engine-intractable ones.
 | h2o | `2-call-site-sensitive+heap` | FAIL ❌ | FAIL | FAIL |
 | xalan | `2-call-site-sensitive+heap` | 485 s ✅ | FAIL | FAIL |
 | spring | `2-call-site-sensitive+heap` | FAIL ❌ | FAIL | FAIL |
+| luindex | `2-call-site-sensitive+2-heap` | 503 s ✅ | FAIL | FAIL |
+| eclipse | `2-call-site-sensitive+2-heap` | 946 s ✅ | FAIL | FAIL |
+| batik | `2-call-site-sensitive+2-heap` | FAIL ❌ | FAIL | FAIL |
+| h2o | `2-call-site-sensitive+2-heap` | FAIL ❌ | FAIL | FAIL |
+| xalan | `2-call-site-sensitive+2-heap` | 509 s ✅ | FAIL | FAIL |
+| spring | `2-call-site-sensitive+2-heap` | FAIL ❌ | FAIL | FAIL |
+| batik | `3-type-sensitive+3-heap` | 171 s ✅ | FAIL | 577 |
+| batik | `3-object-sensitive+2-heap` | 368 s ✅ | FAIL | 1557 |
+| batik | `3-object-sensitive+3-heap` | 380 s ✅ | FAIL | 1659 |
+| h2o | `3-object-sensitive+3-heap` | 294 s ✅ | FAIL | 1130 |
+| batik | `4-object-sensitive+4-heap` | FAIL ❌ | FAIL | FAIL |
+| h2o | `4-object-sensitive+4-heap` | FAIL ❌ | FAIL | FAIL |
+| batik | `adaptive-2-object-sensitive+heap` | 188 s ✅ | FAIL | 806 |
+| spring | `adaptive-2-object-sensitive+heap` | 481 s ✅ | FAIL | 1744 |
+| luindex | `sticky-2-object-sensitive` | FAIL ❌ | FAIL | FAIL |
+| eclipse | `sticky-2-object-sensitive` | FAIL ❌ | FAIL | FAIL |
+| batik | `sticky-2-object-sensitive` | FAIL ❌ | FAIL | FAIL |
+| h2o | `sticky-2-object-sensitive` | FAIL ❌ | FAIL | FAIL |
+| xalan | `sticky-2-object-sensitive` | FAIL ❌ | FAIL | FAIL |
+| spring | `sticky-2-object-sensitive` | FAIL ❌ | FAIL | FAIL |
+| eclipse | `selective-2-object-sensitive+heap` | FAIL ❌ | FAIL | FAIL |
+| batik | `selective-2-object-sensitive+heap` | FAIL ❌ | FAIL | FAIL |
+| h2o | `selective-2-object-sensitive+heap` | 904 s ✅ | FAIL | FAIL |
+| spring | `selective-2-object-sensitive+heap` | FAIL ❌ | FAIL | FAIL |
+| batik | `partitioned-2-object-sensitive+heap` | 194 s ✅ | FAIL | 797 |
+| spring | `partitioned-2-object-sensitive+heap` | 476 s ✅ | FAIL | 1636 |
 
 ## Observations
 
-- **FlowLog is fastest at run time on every completed cell**, and finishes many
-  heavy batik/spring/h2o cells where Soufflé times out. It fails only where
-  *both* engines are intractable (`2-call-site-sensitive+heap`, largest apps).
-- **DOOP `.plan` matters:** ~2x faster than no-plan on heavy cells and rescues
-  several cells no-plan cannot finish (identical output).
+- **FlowLog runs the most of the matrix (127/144)** and is fastest at run time
+  on every completed cell — often several x faster, and it finishes many
+  heavy batik/spring/h2o cells where Soufflé no-plan times out.
+- **FlowLog only fails where the analysis is intractable for everyone** — the
+  17 all-engine cells (2-call-site+heap/+2-heap, 4-object+4-heap,
+  selective/sticky-2-object) that need far more than 450 GB.
+- **DOOP `.plan` matters:** with-plan reaches 118 cells vs no-plan's 98, ~2x
+  faster on heavy cells (identical output).
 - **Compile cost trades the other way:** FlowLog's build (Rust codegen + rustc,
   ~200-250 s, 7-10 GB RSS) is slower/heavier than Soufflé's (~140-165 s,
   ~2.3 GB), paid once per family.
-- **Correctness:** all 64 completed comparison cells `COUNT_MATCH`.
+- **Correctness:** all 98 comparable cells `COUNT_MATCH`; zero `COUNT_DIFF`.
 
 Raw data: [`time_flowlog-west3.tsv`](./time_flowlog-west3.tsv).
