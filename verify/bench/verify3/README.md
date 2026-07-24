@@ -37,7 +37,7 @@ serialization**, so the number is pure fixpoint compute). Full 24-family x
 - **Timing metric:** `.printsize`; no relation is serialized to disk.
 - **Repetitions:** `REPS=3` (median); first rep >= `REP_LONG=900 s` is single-shot.
 - **Guards:** `MEM_MAX=450G` (per-run `systemd` scope), `RUN_TO=1800 s`, `BUILD_TO=7200 s`.
-- **Host:** `flowlog-west3` — 64 cores, 503 GB RAM, facts on ext4 (not tmpfs).
+- **Host:** `flowlog-west3` — Azure `Standard_E64ads_v5` (see [Machine / environment](#machine--environment)); facts on ext4 (not tmpfs).
 - **Datasets:** `luindex eclipse batik h2o xalan spring` (`NemoYuu/flowlog_benchmark`).
 
 ### Dataset note (empty-relation stubs)
@@ -47,6 +47,21 @@ DOOP emits no `.facts` file for relations empty in a program (`KeepClass`,
 `PrimaryPartition`, `TypeToPartition`). FlowLog treats a missing `.input` as
 empty; **Soufflé errors** (`Cannot open fact file ...`). Empty stubs were
 created for these declared inputs (no result change — the relations are empty).
+
+## Machine / environment
+
+All three engines ran on a single Azure VM, one analysis at a time.
+
+| | |
+|---|---|
+| **Cloud VM** | Microsoft Azure `Standard_E64ads_v5` (Eadsv5, memory-optimized), region `westcentralus` |
+| **CPU** | AMD EPYC 7763 (Milan), **64 vCPU** = 1 socket × 32 cores × 2 threads (SMT on); AMD-V full virtualization |
+| **Memory** | **503 GiB** usable (512 GiB nominal) — sets the `MEM_MAX=450G` per-run cap (~53 GiB headroom) |
+| **OS / kernel** | Ubuntu 22.04.5 LTS, kernel `6.8.0-1059-azure` (x86-64) |
+| **Storage** | facts on a **1 TB ext4 data disk** (`/dev/sdc` → `/datasets`, **not** tmpfs, so they don't count against `MEM_MAX`); 62 GB OS disk |
+| **Soufflé** | 2.5 (OpenMP, ffi, sqlite, zlib) |
+| **FlowLog toolchain** | rustc 1.95.0 / cargo 1.95.0 |
+| **C++ backend** | gcc 11.4.0 (Soufflé's generated-code compiler) |
 
 ## Column legend
 
