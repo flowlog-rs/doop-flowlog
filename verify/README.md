@@ -25,8 +25,10 @@ byte-identical to what the DOOP driver assembles at run time, so running via
 ## Quick start
 
 ```bash
-# build the FlowLog compiler (flowlog-rs/flowlog, main-next)
+# build the FlowLog compiler (flowlog-rs/flowlog, main), and have the crates it
+# generates use that checkout's runtime
 cargo build --release -p flowlog-compiler     # -> target/release/flowlog-compiler
+export FLOWLOG_RUNTIME_PATH=$PWD/flowlog-runtime
 
 # timing sweep: all families × your datasets, FlowLog vs Soufflé (±.plan), 32 threads
 FLC=/path/to/flowlog-compiler FACTS_ROOT=/data/dacapo-facts verify/bench/time.sh
