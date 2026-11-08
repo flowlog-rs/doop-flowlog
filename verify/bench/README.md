@@ -20,9 +20,11 @@ plus adaptive / sticky / selective / partitioned).
 
 ## Prerequisites
 
-- **FlowLog compiler** — build from `flowlog-rs/flowlog` `main-next`:
-  `cargo build --release -p flowlog-compiler` → point `FLC` at the binary.
-  (The shipped `*.flowlog.dl` use the `main-next`-compatible grammar.)
+- **FlowLog compiler** — build from `flowlog-rs/flowlog` `main`:
+  `cargo build --release -p flowlog-compiler` → point `FLC` at the binary, and
+  `export FLOWLOG_RUNTIME_PATH=<flowlog checkout>/flowlog-runtime` so that the
+  crates it generates use that checkout's runtime rather than the crates.io
+  release, which can lag the compiler.
 - **Soufflé 2.x** on `PATH` (`souffle`).
 - **Fact sets**: a directory `$FACTS_ROOT` with one subdirectory per benchmark,
   each holding DOOP-generated `*.facts` (directly, or in a `facts/` child).
@@ -95,5 +97,5 @@ Note: fact sets placed on a tmpfs (`/dev/shm`) count as RAM, so subtract them.
   at 32 threads therefore only checks *counts*; `output.sh` runs single-threaded
   for the full byte comparison.
 - The FlowLog logic differs from Soufflé's only by the documented mechanical
-  grammar categories (records→tuples, head aggregates, etc.) — see
+  grammar categories (records→tuples, named aggregate columns, etc.) — see
   [`../../flowlog-logic/README.md`](../../flowlog-logic/README.md).

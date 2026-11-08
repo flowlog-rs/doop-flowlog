@@ -57,7 +57,10 @@ echo "[$(date +%H:%M:%S)] time START  families=${#FAMILIES[@]} datasets=${DATASE
 LINK="$WORKDIR/facts.link"; first=$(facts_of "${DATASETS[0]}")
 [[ -n "$first" ]] || die "no facts for first dataset '${DATASETS[0]}' under $FACTS_ROOT."
 
-fl_count(){ local d="$1"; local f; f=$(ls "$d"/*VarPointsTo.csv 2>/dev/null | head -1); [[ -n "$f" ]] && tr -dc '0-9' <"$f" || echo NA; }
+# VarPointsTo's .printsize count, from a run's log, under its component
+# prefix: FlowLog prints "[size][mainAnalysis.VarPointsTo]  t=()  size=N",
+# Soufflé "mainAnalysis.VarPointsTo<TAB>N".
+fl_count(){ local n; n=$(grep -aoP '^\[size\]\[(\w+\.)*VarPointsTo\] .*size=\K[0-9]+' "$1" 2>/dev/null | tail -1); echo "${n:-NA}"; }
 sf_count(){ grep -aP '(^|\.)VarPointsTo\t' "$1" 2>/dev/null | head -1 | cut -f2 | tr -dc '0-9' || echo NA; }
 
 for fam in "${FAMILIES[@]}"; do
@@ -96,7 +99,7 @@ for fam in "${FAMILIES[@]}"; do
         s=$(wall_of "$WORKDIR/r.log"); r=$(rss_of "$WORKDIR/r.log"); ss+=("${s:-0}"); rs+=("${r:-0}")
         [[ $i -eq 1 && "${s:-0}" -ge "$REP_LONG" ]] && break
       done
-      [[ "$mode" == fl ]] && cnt=$(fl_count "$od") || cnt=$(sf_count "$WORKDIR/r.log")
+      [[ "$mode" == fl ]] && cnt=$(fl_count "$WORKDIR/r.log") || cnt=$(sf_count "$WORKDIR/r.log")
       echo "$(median "${ss[@]}") $(median "${rs[@]}") $cnt"
     }
     [[ -n "$flbin"   ]] && read flr flrr flv     < <(reps_run "$flbin"   fl "$WORKDIR/flo_$fam")

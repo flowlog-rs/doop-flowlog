@@ -10,9 +10,8 @@
 #   programs/<family>.souffle.dl        Soufflé dialect,  all .output + .plan kept
 #   programs/<family>.souffle-noplan.dl Soufflé dialect,  all .output, .plan stripped
 #
-# The FlowLog logic comes from the branch whose grammar matches the compiler
-# you will run (default: this working tree). To target current FlowLog
-# main-next, generate from the `flowlog-next-datalog-compat` branch.
+# The FlowLog logic comes from $REPO/flowlog-logic (default: this working
+# tree), which is written for FlowLog `main`.
 #
 #   REPO=/path/to/doop-flowlog verify/bench/generate.sh [family ...]
 set -uo pipefail

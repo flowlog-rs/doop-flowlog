@@ -2,7 +2,7 @@
 
 A mirror of [`souffle-logic/`](../souffle-logic) (the DOOP points-to pipeline:
 facts schema, `basic/`, `main/`, and 24 analysis families), translated to the
-FlowLog dialect for current FlowLog `main-next`. Rule structure and
+FlowLog dialect for FlowLog `main`. Rule structure and
 stratification are identical to Soufflé; only the **grammar** differs, in five
 ways:
 
@@ -18,11 +18,13 @@ Superinterface(k,  c ) :- DirectSuperinterface(c,  k ).   // FlowLog
 hctx = [hctxValue]                        →   hctx = (hctxValue,)
 ```
 
-**3. Aggregates move to the head** — a body-bound aggregate becomes a
-head-position aggregate with implicit grouping.
+**3. Aggregates name the columns they range over** — an aggregate is written
+as in Soufflé, but `_` binds nothing: it ranges over the distinct bindings of
+its named variables, where Soufflé's ranges over the matching tuples. So a
+column Soufflé counts or sums over through `_` gets a name.
 ```prolog
 A(t, m, n) :- R(_,t,m), n = count : R(_,t,m).   // Soufflé
-A(t, m, count(h)) :- R(h,t,m).                  // FlowLog
+A(t, m, n) :- R(_,t,m), n = count : R(h,t,m).   // FlowLog
 ```
 
 **4. `.plan` join-order hints dropped** — FlowLog schedules its own joins.
@@ -39,12 +41,6 @@ FormalParam(fidx, m, f), fidx = idx - 1 // FlowLog
 Everything else is byte-identical to Soufflé: rule bodies, `.decl`/`.type`,
 the `.output` set, `match`/`contains`, `overridable`, `.comp`/`.init`
 components, functors (`ord`, `cat`, `substr`), negation and disjunction.
-
-**One main-next-specific no-op** (not a dialect change): the dead
-`OptInterproceduralAssign` rule in `main/context-sensitivity.dl` is commented
-out. It is never produced in any configuration; removing it stops an empty
-tuple-typed relation from becoming a tuple-typed EDB input, which current
-`main-next` rejects. Results are unchanged.
 
 ## Supported
 

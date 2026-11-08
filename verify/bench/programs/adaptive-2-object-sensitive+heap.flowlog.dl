@@ -1242,12 +1242,9 @@ _MethodLookup_ClassResolution(simplename, descriptor, type, method) :-
     _MethodLookup_WithLen(simplename, descriptor, type, method, _),
     Method_DeclaringType(method, supertype),
     isClassType(supertype).
-.decl _MethodLookup_MinLen(simplename:symbol, descriptor:MethodDescriptor, type:ReferenceType, minLen:number)
-_MethodLookup_MinLen(simplename, descriptor, type, min(len)) :-
-    _MethodLookup_WithLen(simplename, descriptor, type, _, len).
 _MethodLookup_ClosestInterface(simplename, descriptor, type, method) :-
     _MethodLookup_MoreThanOne(simplename, descriptor, type),
-    _MethodLookup_MinLen(simplename, descriptor, type, minLen),
+    minLen = min len : { _MethodLookup_WithLen(simplename, descriptor, type, _, len) },
     _MethodLookup_WithLen(simplename, descriptor, type, method, minLen),
     !_MethodLookup_ClassResolution(simplename, descriptor, type, _).
 _MethodLookup_MultiClosestInterfaces(simplename, descriptor, type) :-
@@ -2358,8 +2355,9 @@ RepresentativesToPickFrom(heapRepr, heap) :-
   !HeapIsMergedStringFactory(heap),
   !HeapAllocation_Keep(heap).
 .decl MinRepresentativeHeapToPickFromOrdinal(minHeapReprOrd:number, heap:HeapAllocation)
-MinRepresentativeHeapToPickFromOrdinal(min(ord(heapRepr)), heap) :-
-  RepresentativesToPickFrom(heapRepr, heap).
+MinRepresentativeHeapToPickFromOrdinal(minHeapReprOrd, heap) :-
+  RepresentativesToPickFrom(_, heap),
+  minHeapReprOrd = min ord(heapRepr) : RepresentativesToPickFrom(heapRepr, heap).
 HeapAllocation_Merge(heap, mergeHeap) :-
   isHeapAllocation(mergeHeap),
   ord(mergeHeap) = minHeapReprOrd,
@@ -2445,8 +2443,9 @@ MethodAndTypeToHeap(heap, heaptype, meth) :-
   !ObjectMultipleAllocated(heap),
   !HeapAllocation_Keep(heap).
 .decl AllocationsPerMethodAndType(type:Type, meth:Method, n:number)
-AllocationsPerMethodAndType(type, meth, count(heap)) :-
-  MethodAndTypeToHeap(heap, type, meth).
+AllocationsPerMethodAndType(type, meth, n) :-
+  MethodAndTypeToHeap(_, type, meth),
+  n = count : MethodAndTypeToHeap(heap, type, meth).
 .decl AllocationShouldBeMergedPerMethod(heaptype:Type, meth:Method)
 AllocationShouldBeMergedPerMethod(heaptype, meth) :-
   AllocationsPerMethodAndType(heaptype, meth, n),
@@ -2458,8 +2457,9 @@ MethodAndTypeToMergedHeap(heap, heaptype, meth) :-
   MethodAndTypeToHeap(heap, heaptype, meth).
 .decl MinHeapOrdinalPerMethodAndType(ord:number, type:Type, meth:Method)
 .decl MethodAndTypeToRepresentative(type:Type, meth:Method, reprHeap:HeapAllocation)
-MinHeapOrdinalPerMethodAndType(min(ord(heap)), type, meth) :-
-  MethodAndTypeToMergedHeap(heap, type, meth).
+MinHeapOrdinalPerMethodAndType(minHeapOrd, type, meth) :-
+  MethodAndTypeToMergedHeap(_, type, meth),
+  minHeapOrd = min ord(heap) : MethodAndTypeToMergedHeap(heap, type, meth).
 MethodAndTypeToRepresentative(type, meth, representativeHeap) :-
   isHeapAllocation(representativeHeap),
   MinHeapOrdinalPerMethodAndType(minHeapOrd, type, meth),
@@ -2472,8 +2472,9 @@ HeapRepresentative(representativeHeap, heap) :-
 ClassAndTypeToHeap(heap, heaptype, class) :-
   MethodAndTypeToHeap(heap, heaptype, meth),
   Method_DeclaringType(meth, class).
-AllocationsPerClassAndType(type, class, count(heap)) :-
-  ClassAndTypeToHeap(heap, type, class).
+AllocationsPerClassAndType(type, class, n) :-
+  ClassAndTypeToHeap(_, type, class),
+  n = count : ClassAndTypeToHeap(heap, type, class).
 .decl AllocationShouldBeMergedPerClass(heaptype:Type, class:Type)
 .decl ClassAndTypeToMergedHeap(heap:HeapAllocation, heaptype:Type, class:Type)
 ClassAndTypeToMergedHeap(heap, heaptype, class) :-
@@ -2481,8 +2482,9 @@ ClassAndTypeToMergedHeap(heap, heaptype, class) :-
   ClassAndTypeToHeap(heap, heaptype, class).
 .decl MinHeapOrdinalPerClassAndType(minHeapOrd:number, type:Type, class:Type)
 .decl ClassAndTypeToRepresentative(type:Type, class:Type, reprHeap:HeapAllocation)
-MinHeapOrdinalPerClassAndType(min(ord(heap)), type, class) :-
-  ClassAndTypeToMergedHeap(heap, type, class).
+MinHeapOrdinalPerClassAndType(minHeapOrd, type, class) :-
+  ClassAndTypeToMergedHeap(_, type, class),
+  minHeapOrd = min ord(heap) : ClassAndTypeToMergedHeap(heap, type, class).
 ClassAndTypeToRepresentative(type, class, representativeHeap) :-
   isHeapAllocation(representativeHeap),
   MinHeapOrdinalPerClassAndType(minHeapOrd, type, class),
@@ -2537,8 +2539,9 @@ Class_PackageHack(type, type) :-
 PackageAndTypeToHeap(heap, heaptype, packageName) :-
   ClassAndTypeToHeap(heap, heaptype, class),
   Class_PackageHack(class, packageName).
-AllocationsPerPackageAndType(type, packageName, count(heap)) :-
-  PackageAndTypeToHeap(heap, type, packageName).
+AllocationsPerPackageAndType(type, packageName, n) :-
+  PackageAndTypeToHeap(_, type, packageName),
+  n = count : PackageAndTypeToHeap(heap, type, packageName).
 .decl AllocationShouldBeMergedPerPackage(heaptype:Type, packageName:symbol)
 .decl PackageAndTypeToMergedHeap(heap:HeapAllocation, heaptype:Type, packageName:symbol)
 PackageAndTypeToMergedHeap(heap, heaptype, packageName) :-
@@ -2546,8 +2549,9 @@ PackageAndTypeToMergedHeap(heap, heaptype, packageName) :-
   PackageAndTypeToHeap(heap, heaptype, packageName).
 .decl MinHeapOrdinalPerPackageAndType(minHeapOrd:number, type:Type, packageName:symbol)
 .decl PackageAndTypeToRepresentative(type:Type, packageName:symbol, representativeHeap:HeapAllocation)
-MinHeapOrdinalPerPackageAndType(min(ord(heap)), type, packageName) :-
-  PackageAndTypeToMergedHeap(heap, type, packageName).
+MinHeapOrdinalPerPackageAndType(minHeapOrd, type, packageName) :-
+  PackageAndTypeToMergedHeap(_, type, packageName),
+  minHeapOrd = min ord(heap) : PackageAndTypeToMergedHeap(heap, type, packageName).
 PackageAndTypeToRepresentative(type, packageName, representativeHeap) :-
   isHeapAllocation(representativeHeap),
   MinHeapOrdinalPerPackageAndType(minHeapOrd, type, packageName),
@@ -2559,8 +2563,9 @@ HeapRepresentative(representativeHeap, heap) :-
 .decl AllocationsPerType(type:Type, n:number)
 TypeToHeap(heap, heaptype) :-
   ClassAndTypeToHeap(heap, heaptype, _).
-AllocationsPerType(type, count(heap)) :-
-  TypeToHeap(heap, type).
+AllocationsPerType(type, n) :-
+  TypeToHeap(_, type),
+  n = count : TypeToHeap(heap, type).
 .decl AllocationShouldBeMergedGlobally(heaptype:Type)
 .decl TypeToMergedHeap(heap:HeapAllocation, heaptype:Type)
 TypeToMergedHeap(heap, heaptype) :-
@@ -2568,8 +2573,9 @@ TypeToMergedHeap(heap, heaptype) :-
   TypeToHeap(heap, heaptype).
 .decl MinHeapOrdinalPerType(minHeapOrd:number, type:Type)
 .decl TypeToRepresentative(type:Type, representativeHeap:HeapAllocation)
-MinHeapOrdinalPerType(min(ord(heap)), type) :-
-  TypeToMergedHeap(heap, type).
+MinHeapOrdinalPerType(minHeapOrd, type) :-
+  TypeToMergedHeap(_, type),
+  minHeapOrd = min ord(heap) : TypeToMergedHeap(heap, type).
 TypeToRepresentative(type, representativeHeap) :-
   isHeapAllocation(representativeHeap),
   MinHeapOrdinalPerType(minHeapOrd, type),
@@ -2647,8 +2653,9 @@ ExceptionTypeToHeap(heap, heaptype) :-
   HeapAllocation_Type(heap, heaptype),
   ExceptionType(heaptype).
 .decl ExceptionHeapTypeRepresentativeOrdinal(type:Type, reprHeapOrd:number)
-ExceptionHeapTypeRepresentativeOrdinal(type, min(ord(heap))) :-
-  ExceptionTypeToHeap(heap, type).
+ExceptionHeapTypeRepresentativeOrdinal(type, representativeHeapOrd) :-
+  ExceptionTypeToHeap(_, type),
+  representativeHeapOrd = min ord(heap) : ExceptionTypeToHeap(heap, type).
 HeapRepresentative(representativeHeap, heap) :-
   ExceptionHeapTypeRepresentativeOrdinal(heaptype, representativeHeapOrd),
   ExceptionTypeToHeap(heap, heaptype),
@@ -2685,8 +2692,9 @@ Suffix(type, type, suffixLen) :-
   isType(type),
   suffixLen = strlen(type).
 .decl MinimalSuffixLen(type:Type, suffixLen:number)
-MinimalSuffixLen(type, min(len)) :-
-  Suffix(type, _, len).
+MinimalSuffixLen(type, suffixLen) :-
+  isType(type),
+  suffixLen = min len : Suffix(type, _, len).
 .decl MinimalSuffix(type:Type, suffix:symbol)
 MinimalSuffix(type, suffix) :-
   MinimalSuffixLen(type, suffixLen),
@@ -2994,6 +3002,9 @@ VarPointsTo(hctx, value, toCtx, to) :-
   OptArgAssign(toCtx, to, fromCtx, from, allowedType),
   Value_Type(value, type),
   basic.SubtypeOf(type, allowedType).
+VarPointsTo(hctx, value, toCtx, to) :-
+  OptInterproceduralAssign(toCtx, to, fromCtx, from),
+  VarPointsTo(hctx, value, fromCtx, from).
 .decl OptVirtualMethodInvocationBase(invocation:MethodInvocation, base:Var)
 OptVirtualMethodInvocationBase(invocation, base) :-
   Reachable(inmethod),
@@ -3161,18 +3172,18 @@ CallGraphEdge(callerCtx, invocation, calleeCtx, tomethod) :-
     InitHContextRequest(value),
     hctx = (value,).
   .decl Method_NumberOfContexts(method:Method, n:number)
-    Method_NumberOfContexts(method, count(c)) :-
+    Method_NumberOfContexts(method, n) :-
       Reachable(method),
-      ReachableContext(c, method).
+      n = count : { ReachableContext(ctx, method) }.
     .output Method_NumberOfContexts
     .decl VPTCountPerMethodVariable(method:Method, var:Var, n:number)
-    VPTCountPerMethodVariable(method, var, count(v)) :-
+    VPTCountPerMethodVariable(method, var, n) :-
        Var_DeclaringMethod(var, method),
-       mainAnalysis.VarPointsTo(v, _, _, var).
+       n = count : { mainAnalysis.VarPointsTo(hctx, value, ctx, var) }.
     .decl MethodTotalVPT(method:Method, Y:number)
-    MethodTotalVPT(method, sum(n)) :-
+    MethodTotalVPT(method, total) :-
       mainAnalysis.Reachable(method),
-      VPTCountPerMethodVariable(method, _, n).
+      total = sum n : { VPTCountPerMethodVariable(method, var, n) }.
     MethodTotalVPT(method, 0) :-
       mainAnalysis.Reachable(method),
       !Var_DeclaringMethod(_, method).
