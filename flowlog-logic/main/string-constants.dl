@@ -102,8 +102,9 @@ RepresentativesToPickFrom(heapRepr, heap) :-
 
 .decl MinRepresentativeHeapToPickFromOrdinal(minHeapReprOrd:number, heap:HeapAllocation)
 
-MinRepresentativeHeapToPickFromOrdinal(min(ord(heapRepr)), heap) :-
-  RepresentativesToPickFrom(heapRepr, heap).
+MinRepresentativeHeapToPickFromOrdinal(minHeapReprOrd, heap) :-
+  RepresentativesToPickFrom(_, heap),
+  minHeapReprOrd = min ord(heapRepr) : RepresentativesToPickFrom(heapRepr, heap).
 
 HeapAllocation_Merge(heap, mergeHeap) :-
   isHeapAllocation(mergeHeap),
@@ -259,8 +260,9 @@ StringGreaterThanOtherInSameClass(heap1, heap2, type) :-
 .decl StringImmediatelyLessThanOtherInClass(heap:HeapAllocation, type:Type, heapGreater:HeapAllocation)
 .decl StringImmediatelyGreaterThanOtherInSomeClass(heapGreater:HeapAllocation, heap:HeapAllocation)
 
-MinStringOrdinalGreaterThanOtherInSameClass(heap, min(ord(h)), type) :-
-  StringGreaterThanOtherInSameClass(h, heap, type).
+MinStringOrdinalGreaterThanOtherInSameClass(heap, heapGreaterOrd, type) :-
+  StringGreaterThanOtherInSameClass(_, heap, type),
+  heapGreaterOrd = min ord(h) : StringGreaterThanOtherInSameClass(h, heap, type).
 
 StringImmediatelyLessThanOtherInClass(heap, type, heapGreater) :-
   MinStringOrdinalGreaterThanOtherInSameClass(heap, heapGreaterOrd, type),
@@ -282,14 +284,16 @@ StringColorGreaterThan(num + 1, heap) :-
 
 .decl StringColorForHeap(heap:HeapAllocation, color:number)
 
-StringColorForHeap(heap, max(n)) :-
-  StringColorGreaterThan(n, heap).
+StringColorForHeap(heap, color) :-
+  StringColorGreaterThan(_, heap),
+  color = max n : StringColorGreaterThan(n, heap).
 
 .decl MinStringOrdinalForColor(color:number, minHeapOrd:number)
 .decl StringRepresentativeForColor(color:number, heap:HeapAllocation)
 
-MinStringOrdinalForColor(color, min(ord(heap))) :-
-  StringColorForHeap(heap, color).
+MinStringOrdinalForColor(color, minHeapOrd) :-
+  StringColorForHeap(_, color),
+  minHeapOrd = min ord(heap) : StringColorForHeap(heap, color).
 
 StringRepresentativeForColor(color, mergeHeap) :-
   MinStringOrdinalForColor(color, minHeapOrd),
@@ -659,8 +663,9 @@ MethodAndTypeToHeap(heap, heaptype, meth) :-
 
 .decl AllocationsPerMethodAndType(type:Type, meth:Method, n:number)
 
-AllocationsPerMethodAndType(type, meth, count(heap)) :-
-  MethodAndTypeToHeap(heap, type, meth).
+AllocationsPerMethodAndType(type, meth, n) :-
+  MethodAndTypeToHeap(_, type, meth),
+  n = count : MethodAndTypeToHeap(heap, type, meth).
 
 .decl AllocationShouldBeMergedPerMethod(heaptype:Type, meth:Method)
 
@@ -678,8 +683,9 @@ MethodAndTypeToMergedHeap(heap, heaptype, meth) :-
 .decl MinHeapOrdinalPerMethodAndType(ord:number, type:Type, meth:Method)
 .decl MethodAndTypeToRepresentative(type:Type, meth:Method, reprHeap:HeapAllocation)
 
-MinHeapOrdinalPerMethodAndType(min(ord(heap)), type, meth) :-
-  MethodAndTypeToMergedHeap(heap, type, meth).
+MinHeapOrdinalPerMethodAndType(minHeapOrd, type, meth) :-
+  MethodAndTypeToMergedHeap(_, type, meth),
+  minHeapOrd = min ord(heap) : MethodAndTypeToMergedHeap(heap, type, meth).
 
 MethodAndTypeToRepresentative(type, meth, representativeHeap) :-
   isHeapAllocation(representativeHeap),
@@ -701,8 +707,9 @@ ClassAndTypeToHeap(heap, heaptype, class) :-
   MethodAndTypeToHeap(heap, heaptype, meth),
   Method_DeclaringType(meth, class).
 
-AllocationsPerClassAndType(type, class, count(heap)) :-
-  ClassAndTypeToHeap(heap, type, class).
+AllocationsPerClassAndType(type, class, n) :-
+  ClassAndTypeToHeap(_, type, class),
+  n = count : ClassAndTypeToHeap(heap, type, class).
 
 // This is explicitly set for types that want it.
 .decl AllocationShouldBeMergedPerClass(heaptype:Type, class:Type)
@@ -716,8 +723,9 @@ ClassAndTypeToMergedHeap(heap, heaptype, class) :-
 .decl MinHeapOrdinalPerClassAndType(minHeapOrd:number, type:Type, class:Type)
 .decl ClassAndTypeToRepresentative(type:Type, class:Type, reprHeap:HeapAllocation)
 
-MinHeapOrdinalPerClassAndType(min(ord(heap)), type, class) :-
-  ClassAndTypeToMergedHeap(heap, type, class).
+MinHeapOrdinalPerClassAndType(minHeapOrd, type, class) :-
+  ClassAndTypeToMergedHeap(_, type, class),
+  minHeapOrd = min ord(heap) : ClassAndTypeToMergedHeap(heap, type, class).
 
 ClassAndTypeToRepresentative(type, class, representativeHeap) :-
   isHeapAllocation(representativeHeap),
@@ -739,8 +747,9 @@ PackageAndTypeToHeap(heap, heaptype, packageName) :-
   ClassAndTypeToHeap(heap, heaptype, class),
   Class_PackageHack(class, packageName).
 
-AllocationsPerPackageAndType(type, packageName, count(heap)) :-
-  PackageAndTypeToHeap(heap, type, packageName).
+AllocationsPerPackageAndType(type, packageName, n) :-
+  PackageAndTypeToHeap(_, type, packageName),
+  n = count : PackageAndTypeToHeap(heap, type, packageName).
 
 // This is explicitly set for types that want it.
 .decl AllocationShouldBeMergedPerPackage(heaptype:Type, packageName:symbol)
@@ -754,8 +763,9 @@ PackageAndTypeToMergedHeap(heap, heaptype, packageName) :-
 .decl MinHeapOrdinalPerPackageAndType(minHeapOrd:number, type:Type, packageName:symbol)
 .decl PackageAndTypeToRepresentative(type:Type, packageName:symbol, representativeHeap:HeapAllocation)
 
-MinHeapOrdinalPerPackageAndType(min(ord(heap)), type, packageName) :-
-  PackageAndTypeToMergedHeap(heap, type, packageName).
+MinHeapOrdinalPerPackageAndType(minHeapOrd, type, packageName) :-
+  PackageAndTypeToMergedHeap(_, type, packageName),
+  minHeapOrd = min ord(heap) : PackageAndTypeToMergedHeap(heap, type, packageName).
 
 PackageAndTypeToRepresentative(type, packageName, representativeHeap) :-
   isHeapAllocation(representativeHeap),
@@ -774,8 +784,9 @@ HeapRepresentative(representativeHeap, heap) :-
 TypeToHeap(heap, heaptype) :-
   ClassAndTypeToHeap(heap, heaptype, _).
 
-AllocationsPerType(type, count(heap)) :-
-  TypeToHeap(heap, type).
+AllocationsPerType(type, n) :-
+  TypeToHeap(_, type),
+  n = count : TypeToHeap(heap, type).
 
 // This is explicitly set for types that want it.
 .decl AllocationShouldBeMergedGlobally(heaptype:Type)
@@ -789,8 +800,9 @@ TypeToMergedHeap(heap, heaptype) :-
 .decl MinHeapOrdinalPerType(minHeapOrd:number, type:Type)
 .decl TypeToRepresentative(type:Type, representativeHeap:HeapAllocation)
 
-MinHeapOrdinalPerType(min(ord(heap)), type) :-
-  TypeToMergedHeap(heap, type).
+MinHeapOrdinalPerType(minHeapOrd, type) :-
+  TypeToMergedHeap(_, type),
+  minHeapOrd = min ord(heap) : TypeToMergedHeap(heap, type).
 
 TypeToRepresentative(type, representativeHeap) :-
   isHeapAllocation(representativeHeap),
@@ -883,8 +895,9 @@ PackageAndTypeToStringFactoryHeap(heap, heaptype, packageName) :-
 .decl MinStringFactoryHeapOrdinalPerPackageAndType(minHeapOrd:number, type:Type, packageName:symbol)
 .decl PackageAndTypeToStringFactoryRepresentative(type:Type, packageName:symbol, representativeHeap:HeapAllocation)
 
-MinStringFactoryHeapOrdinalPerPackageAndType(min(ord(heap)), type, packageName) :-
-  PackageAndTypeToStringFactoryHeap(heap, type, packageName).
+MinStringFactoryHeapOrdinalPerPackageAndType(minHeapOrd, type, packageName) :-
+  PackageAndTypeToStringFactoryHeap(_, type, packageName),
+  minHeapOrd = min ord(heap) : PackageAndTypeToStringFactoryHeap(heap, type, packageName).
 
 PackageAndTypeToStringFactoryRepresentative(type, packageName, representativeHeap) :-
   MinStringFactoryHeapOrdinalPerPackageAndType(minHeapOrd, type, packageName),
@@ -962,8 +975,9 @@ ExceptionTypeToHeap(heap, heaptype) :-
 
 .decl ExceptionHeapTypeRepresentativeOrdinal(type:Type, reprHeapOrd:number)
 
-ExceptionHeapTypeRepresentativeOrdinal(type, min(ord(heap))) :-
-  ExceptionTypeToHeap(heap, type).
+ExceptionHeapTypeRepresentativeOrdinal(type, representativeHeapOrd) :-
+  ExceptionTypeToHeap(_, type),
+  representativeHeapOrd = min ord(heap) : ExceptionTypeToHeap(heap, type).
 
 #ifndef NO_MERGES
 HeapRepresentative(representativeHeap, heap) :-
@@ -1092,8 +1106,9 @@ Suffix(type, type, suffixLen) :-
 
 .decl MinimalSuffixLen(type:Type, suffixLen:number)
 
-MinimalSuffixLen(type, min(len)) :-
-  Suffix(type, _, len).
+MinimalSuffixLen(type, suffixLen) :-
+  isType(type),
+  suffixLen = min len : Suffix(type, _, len).
 
 // Computes the suffix after the last dot of a type name.
 .decl MinimalSuffix(type:Type, suffix:symbol)
